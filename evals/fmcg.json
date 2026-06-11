@@ -1,0 +1,52 @@
+[
+  {
+    "id": "fmcg-price-objection",
+    "language": "hi-en",
+    "transcript": "AGENT: Namaste ji, new stock dekhiye.\nCUSTOMER: Ye pack bahut costly hai.",
+    "expected_signals": [
+      { "type": "objection", "subtype": "price_too_high" },
+      { "type": "price_reaction", "subtype": "negative" }
+    ]
+  },
+  {
+    "id": "fmcg-stock-unsold",
+    "language": "hi-en",
+    "transcript": "CUSTOMER: Purana stock pada hai, not selling.",
+    "expected_signals": [
+      { "type": "objection", "subtype": "stock_unsold" }
+    ]
+  },
+  {
+    "id": "fmcg-sku-and-scheme",
+    "language": "hi-en",
+    "transcript": "CUSTOMER: Chota pack chahiye, sachet wala. Scheme kya hai?",
+    "expected_signals": [
+      { "type": "demand", "subtype": "sku_request" },
+      { "type": "price_reaction", "subtype": "scheme_request" }
+    ]
+  },
+  {
+    "id": "fmcg-competitor-margin",
+    "language": "hi-en",
+    "transcript": "CUSTOMER: Other company better margin de rahi hai.",
+    "expected_signals": [
+      { "type": "competitor_mention", "subtype": "competitor_brand" },
+      { "type": "price_reaction", "subtype": "discount_request" }
+    ]
+  },
+  {
+    "id": "fmcg-promise-and-intent",
+    "language": "en",
+    "transcript": "AGENT: I will deliver by tomorrow.\nCUSTOMER: Theek hai, book my order.",
+    "expected_signals": [
+      { "type": "promise", "subtype": "delivery_promise" },
+      { "type": "intent", "subtype": "purchase_intent" }
+    ]
+  },
+  {
+    "id": "fmcg-no-signal-control",
+    "language": "hi",
+    "transcript": "AGENT: Namaste ji, kaise hain?\nCUSTOMER: Sab accha hai, dhanyavaad.",
+    "expected_signals": []
+  }
+]

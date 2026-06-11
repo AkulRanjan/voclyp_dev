@@ -1,0 +1,36 @@
+{
+  "industry": "fmcg",
+  "extends": "base",
+  "version": "1.0",
+  "description": "FMCG field sales: SKUs, distribution, shelf space, retailer margins.",
+  "signals": {
+    "objection": {
+      "patterns": [
+        { "subtype": "stock_unsold", "any": ["old stock", "stock is lying", "not selling", "slow moving"] },
+        { "subtype": "margin_too_low", "any": ["margin is less", "low margin", "no profit in this"] }
+      ]
+    },
+    "demand": {
+      "patterns": [
+        { "subtype": "sku_request", "any": ["small pack", "sachet", "bigger pack", "new flavour", "combo pack"] },
+        { "subtype": "restock", "any": ["out of stock", "stock finished", "need delivery", "send stock"] }
+      ]
+    },
+    "competitor_mention": {
+      "patterns": [
+        { "subtype": "competitor_brand", "any": ["other company", "competitor", "their scheme", "other brand"] }
+      ]
+    },
+    "price_reaction": {
+      "patterns": [
+        { "subtype": "scheme_request", "any": ["scheme", "offer", "free piece", "trade discount"] }
+      ]
+    }
+  },
+  "summary_fields": [
+    { "name": "sku_requests", "from": "signal_quotes", "signal": "demand", "subtype": "sku_request" },
+    { "name": "restock_needed", "from": "signal_present", "signal": "demand", "subtype": "restock" },
+    { "name": "competitor_activity", "from": "signal_present", "signal": "competitor_mention" },
+    { "name": "scheme_requested", "from": "signal_present", "signal": "price_reaction", "subtype": "scheme_request" }
+  ]
+}

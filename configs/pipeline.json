@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "description": "Pipeline composition. Swap any impl (e.g. asr: stub -> whisper) without touching code. The loader rejects any order that violates the privacy invariant.",
+  "stages": [
+    { "role": "asr", "impl": "stub" },
+    { "role": "diarization", "impl": "stub" },
+    { "role": "lang_id_translation", "impl": "stub" },
+    { "role": "pii_redaction", "impl": "regex" },
+    { "role": "audio_deletion", "impl": "vault" },
+    { "role": "signal_extraction", "impl": "taxonomy" },
+    { "role": "summarization", "impl": "taxonomy" }
+  ]
+}

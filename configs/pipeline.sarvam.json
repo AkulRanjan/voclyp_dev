@@ -1,0 +1,13 @@
+{
+  "version": "1.0-sarvam",
+  "description": "Production pipeline backed by Sarvam AI (Saarika ASR + translate). Requires SARVAM_API_KEY. Select with VOCLYP_PIPELINE_CONFIG=configs/pipeline.sarvam.json. Languages come from configs/languages.json (hi-IN + en-IN today).",
+  "stages": [
+    { "role": "asr", "impl": "sarvam", "options": { "model": "saarika:v2.5" } },
+    { "role": "diarization", "impl": "stub" },
+    { "role": "lang_id_translation", "impl": "sarvam" },
+    { "role": "pii_redaction", "impl": "regex" },
+    { "role": "audio_deletion", "impl": "vault" },
+    { "role": "signal_extraction", "impl": "taxonomy" },
+    { "role": "summarization", "impl": "taxonomy" }
+  ]
+}

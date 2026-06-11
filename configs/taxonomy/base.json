@@ -1,0 +1,46 @@
+{
+  "industry": "base",
+  "version": "1.0",
+  "description": "Universal signal taxonomy. Every industry pack extends this; these signal types are the only ones that exist in the insight schema.",
+  "signals": {
+    "objection": {
+      "patterns": [
+        { "subtype": "price_too_high", "any": ["too expensive", "price is high", "cannot afford", "very costly"] },
+        { "subtype": "no_need", "any": ["don't need", "not interested", "no use for"] },
+        { "subtype": "bad_experience", "any": ["last time", "previous problem", "complaint", "did not work"] }
+      ]
+    },
+    "intent": {
+      "patterns": [
+        { "subtype": "purchase_intent", "any": ["i will buy", "i will take", "send me", "book my order", "place the order"] },
+        { "subtype": "consider_later", "any": ["think about it", "next month", "later", "not now"] }
+      ]
+    },
+    "demand": {
+      "patterns": [
+        { "subtype": "product_request", "any": ["do you have", "i want", "need more", "looking for"] }
+      ]
+    },
+    "competitor_mention": {
+      "patterns": []
+    },
+    "price_reaction": {
+      "patterns": [
+        { "subtype": "negative", "any": ["too expensive", "very costly", "cheaper elsewhere"] },
+        { "subtype": "positive", "any": ["good price", "fair price", "reasonable"] },
+        { "subtype": "discount_request", "any": ["discount", "better rate", "best price", "margin"] }
+      ]
+    },
+    "promise": {
+      "patterns": [
+        { "subtype": "delivery_promise", "any": ["i will deliver", "will reach you", "by tomorrow", "by next week"] },
+        { "subtype": "follow_up_promise", "any": ["i will call", "i will visit", "will come back", "will check and tell"] }
+      ]
+    }
+  },
+  "summary_fields": [
+    { "name": "objection_count", "from": "signal_count", "signal": "objection" },
+    { "name": "purchase_intent", "from": "signal_present", "signal": "intent", "subtype": "purchase_intent" },
+    { "name": "promises_made", "from": "signal_quotes", "signal": "promise" }
+  ]
+}

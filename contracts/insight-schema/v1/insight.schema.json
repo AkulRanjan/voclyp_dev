@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://voclyp.io/contracts/insight-schema/v1/insight.schema.json",
+  "title": "VoClyp Insight Document v1",
+  "description": "The versioned output contract. All consumers (webhooks, API, connectors, dashboards) bind to this and never to pipeline internals.",
+  "type": "object",
+  "required": [
+    "schema_version", "tenant_id", "conversation_id", "industry",
+    "languages", "signals", "summary", "privacy", "audit", "created_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tenant_id": { "type": "string" },
+    "conversation_id": { "type": "string" },
+    "industry": { "type": "string" },
+    "agent_id": { "type": "string" },
+    "languages": {
+      "type": "object",
+      "required": ["detected", "normalized_to", "code_switching"],
+      "properties": {
+        "detected": { "type": "array", "items": { "type": "string" } },
+        "normalized_to": { "type": "string" },
+        "code_switching": { "type": "boolean" }
+      }
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "subtype", "speaker", "quote", "turn", "confidence"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["objection", "intent", "demand", "competitor_mention", "price_reaction", "promise"]
+          },
+          "subtype": { "type": "string" },
+          "speaker": { "type": "string", "enum": ["agent", "customer", "unknown"] },
+          "quote": { "type": "string", "description": "Redacted, normalized-language quote" },
+          "turn": { "type": "integer", "minimum": 0 },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["text", "fields"],
+      "properties": {
+        "text": { "type": "string" },
+        "fields": {
+          "type": "object",
+          "description": "Industry-shaped fields; keys are declared by the tenant's taxonomy config pack."
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "required": ["consent_captured", "pii_redactions"],
+      "properties": {
+        "consent_captured": { "type": "boolean" },
+        "pii_redactions": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" },
+          "description": "Count of redactions by PII type (phone, email, name, ...)"
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "required": ["audio_deleted_at", "stage_versions"],
+      "properties": {
+        "audio_deleted_at": { "type": "string", "format": "date-time" },
+        "stage_versions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Stage name -> version that produced this insight (MLOps lineage)."
+        },
+        "taxonomy_version": { "type": "string" }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

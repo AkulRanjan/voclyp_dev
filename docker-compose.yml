@@ -1,0 +1,27 @@
+# Single-node deployment: gateway + worker from one image, sharing /data.
+# Production: put a TLS-terminating proxy in front of the gateway and source
+# VOCLYP_MASTER_KEY from a secrets manager (see docs/SECURITY.md).
+services:
+  gateway:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      VOCLYP_DATA_DIR: /data
+      VOCLYP_MASTER_KEY: ${VOCLYP_MASTER_KEY:?set VOCLYP_MASTER_KEY in the environment}
+    volumes:
+      - voclyp-data:/data
+
+  worker:
+    build: .
+    command: ["python", "-m", "voclyp.worker", "--data-dir", "/data"]
+    environment:
+      VOCLYP_DATA_DIR: /data
+      VOCLYP_MASTER_KEY: ${VOCLYP_MASTER_KEY:?set VOCLYP_MASTER_KEY in the environment}
+    volumes:
+      - voclyp-data:/data
+    depends_on:
+      - gateway
+
+volumes:
+  voclyp-data:

@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "description": "Language policy as data, like the taxonomy: enabling a new language later is an edit here (plus eval coverage), not a code change. Codes are BCP-47 as used by Sarvam.",
+  "normalize_to": "en-IN",
+  "enabled": [
+    { "code": "hi-IN", "name": "Hindi" },
+    { "code": "en-IN", "name": "English" }
+  ],
+  "planned": [
+    "bn-IN", "gu-IN", "kn-IN", "ml-IN", "mr-IN", "od-IN", "pa-IN", "ta-IN", "te-IN"
+  ]
+}

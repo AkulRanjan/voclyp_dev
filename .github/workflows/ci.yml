@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e .[gateway,security] httpx
+      - name: Unit + integration tests
+        run: python -m unittest discover tests -v
+      - name: Eval regression gate (fmcg)
+        run: python -m voclyp.mlops.eval --industry fmcg --min-f1 0.8
+      - name: Eval regression gate (pharma)
+        run: python -m voclyp.mlops.eval --industry pharma --min-f1 0.8

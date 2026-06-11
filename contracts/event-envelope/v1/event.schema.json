@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://voclyp.io/contracts/event-envelope/v1/event.schema.json",
+  "title": "VoClyp Canonical Event Envelope v1",
+  "description": "Thin event payload delivered by signed webhooks. Carries a resource reference and fetch URL, never insight content: consumers retrieve the full document via the authenticated REST API. Changes are additive-only within this major version. Consumers must deduplicate on event_id (delivery is at-least-once), use sequence to discard stale events, and verify the X-Voclyp-Signature header against the raw body.",
+  "type": "object",
+  "required": [
+    "event_id", "event_type", "schema_version", "occurred_at",
+    "delivered_at", "tenant_id", "sequence", "data"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string", "format": "uuid",
+      "description": "UUIDv7; globally unique, time-ordered. The consumer's idempotency/deduplication key."
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["conversation.insights.ready", "conversation.deleted", "endpoint.test.ping"],
+      "description": "Namespaced. New types may be added within this major version; consumers must ignore unknown types."
+    },
+    "schema_version": { "const": "1.0" },
+    "occurred_at": {
+      "type": "string", "format": "date-time",
+      "description": "When the state change was committed (immutable across retries)."
+    },
+    "delivered_at": {
+      "type": "string", "format": "date-time",
+      "description": "When this delivery attempt was made; retries carry a fresh value."
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Consumers must verify this matches their own tenancy before processing."
+    },
+    "sequence": {
+      "type": "integer", "minimum": 0,
+      "description": "Monotonic per-resource counter; discard events with a sequence lower than the last one processed for the same resource so a delayed older event never overwrites newer state."
+    },
+    "data": {
+      "type": "object",
+      "required": ["resource", "id", "status", "fetch_url"],
+      "properties": {
+        "resource": { "type": "string" },
+        "id": { "type": "string" },
+        "status": { "type": "string" },
+        "fetch_url": {
+          "type": "string",
+          "description": "Authenticated REST path (or absolute URL when the platform's public base URL is configured) to retrieve the full resource."
+        }
+      }
+    }
+  }
+}

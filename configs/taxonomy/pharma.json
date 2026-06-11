@@ -1,0 +1,30 @@
+{
+  "industry": "pharma",
+  "extends": "base",
+  "version": "1.0",
+  "description": "Pharma field reps: dosage, compliance, prescriptions, chemist stocking.",
+  "signals": {
+    "objection": {
+      "patterns": [
+        { "subtype": "side_effects", "any": ["side effect", "patient complained", "reaction"] },
+        { "subtype": "prefers_generic", "any": ["generic", "cheaper substitute", "substitute available"] }
+      ]
+    },
+    "demand": {
+      "patterns": [
+        { "subtype": "sample_request", "any": ["samples", "physician sample", "trial pack"] },
+        { "subtype": "dosage_query", "any": ["dosage", "dose", "how many mg", "strength"] }
+      ]
+    },
+    "competitor_mention": {
+      "patterns": [
+        { "subtype": "competitor_brand", "any": ["other company", "competitor", "their rep", "other brand"] }
+      ]
+    }
+  },
+  "summary_fields": [
+    { "name": "samples_requested", "from": "signal_present", "signal": "demand", "subtype": "sample_request" },
+    { "name": "dosage_questions", "from": "signal_quotes", "signal": "demand", "subtype": "dosage_query" },
+    { "name": "compliance_flags", "from": "signal_quotes", "signal": "objection", "subtype": "side_effects" }
+  ]
+}

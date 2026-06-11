@@ -1,0 +1,27 @@
+[
+  {
+    "id": "pharma-sample-request",
+    "language": "hi-en",
+    "transcript": "CUSTOMER: Doctor ko samples dijiye, trial pack bhi.",
+    "expected_signals": [
+      { "type": "demand", "subtype": "sample_request" }
+    ]
+  },
+  {
+    "id": "pharma-side-effect",
+    "language": "hi-en",
+    "transcript": "CUSTOMER: Patient ko side effect hua last time.",
+    "expected_signals": [
+      { "type": "objection", "subtype": "side_effects" },
+      { "type": "objection", "subtype": "bad_experience" }
+    ]
+  },
+  {
+    "id": "pharma-dosage-query",
+    "language": "en",
+    "transcript": "CUSTOMER: What is the dosage for adults?",
+    "expected_signals": [
+      { "type": "demand", "subtype": "dosage_query" }
+    ]
+  }
+]
