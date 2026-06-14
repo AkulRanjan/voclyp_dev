@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoClyp Demo</title>
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">VoClyp</span>
+  <span class="tagline">field conversations in &rarr; structured insight out</span>
+</header>
+<main class="landing">
+  <div class="keycard card">
+    <h2>API key</h2>
+    <p class="muted">Issued by <code>scripts/demo_app.py</code> at startup; stored only in this browser.</p>
+    <div class="row">
+      <input id="api-key" type="password" placeholder="vclp_...">
+      <button id="save-key" class="primary">Save</button>
+    </div>
+    <p id="key-status" class="muted"></p>
+  </div>
+  <div class="cards">
+    <a class="card link-card" href="/app/agent.html">
+      <h2>&#127908; Field Agent</h2>
+      <p>Capture consent, record a conversation (or type a transcript), and submit it for processing.</p>
+    </a>
+    <a class="card link-card" href="/app/dashboard.html">
+      <h2>&#128202; Manager Dashboard</h2>
+      <p>Live insights, extracted signals, provider credit usage, queue and webhook delivery health.</p>
+    </a>
+  </div>
+</main>
+<script src="/app/common.js"></script>
+<script src="/app/home.js"></script>
+</body>
+</html>

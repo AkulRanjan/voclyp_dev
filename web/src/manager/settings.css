@@ -1,0 +1,43 @@
+.settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  box-shadow: var(--shadow-sm);
+}
+.settings-field { display: flex; flex-direction: column; gap: 8px; }
+.settings-label { font-weight: 600; font-size: 13px; }
+.settings-hint { color: var(--text-muted); font-size: 12px; }
+.settings-input {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 13px;
+}
+.settings-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.settings-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  width: fit-content;
+}
+.settings-toggle__opt {
+  padding: 8px 16px;
+  border: none;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.settings-toggle__opt.is-on { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+
+.settings-actions { display: flex; align-items: center; gap: 12px; }
+.settings-saved { color: var(--green-fg); font-size: 13px; font-weight: 600; }

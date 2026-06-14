@@ -1,0 +1,24 @@
+{
+  "name": "voclyp-console",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "VoClyp web console — manager dashboard + salesperson capture, backed by the VoClyp insight API.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}

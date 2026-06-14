@@ -23,6 +23,29 @@
         "code_switching": { "type": "boolean" }
       }
     },
+    "speakers": {
+      "type": "object",
+      "description": "Optional (added in 1.0, additive): diarization result.",
+      "properties": {
+        "count": { "type": "integer", "minimum": 0, "description": "Distinct identified speakers" },
+        "turns": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "transcript": {
+      "type": "array",
+      "description": "Optional (added in 1.0, additive): the full redacted transcript — the only surviving record of the conversation after audio deletion.",
+      "items": {
+        "type": "object",
+        "required": ["turn", "speaker", "text"],
+        "properties": {
+          "turn": { "type": "integer", "minimum": 0 },
+          "speaker": { "type": "string", "enum": ["agent", "customer", "unknown"] },
+          "text": { "type": "string", "description": "Redacted original-language text" },
+          "normalized_text": { "type": "string", "description": "Redacted text in the normalized language" },
+          "languages": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
     "signals": {
       "type": "array",
       "items": {

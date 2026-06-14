@@ -36,7 +36,47 @@ python -m voclyp.mlops.eval --industry fmcg
 python -m voclyp.worker --data-dir data
 ```
 
-The HTTP gateway is optional and needs extras:
+## Demo app (web UI)
+
+With the gateway extras installed (`pip install fastapi uvicorn python-multipart`),
+one command boots the gateway + worker + bundled web UI:
+
+```powershell
+python scripts/demo_app.py                 # stub pipeline — free, no credits
+python scripts/demo_app.py --mode sarvam   # live Saarika ASR (needs SARVAM_API_KEY,
+                                           # each recording spends credits)
+```
+
+It prints a demo API key (persisted in `data/demo-app/api_key.txt`); paste it
+at http://localhost:8000/app/. The **Field Agent** page captures consent and
+records audio in the browser (encoded to 16 kHz WAV client-side — use the
+typed-transcript tab in stub mode, where "audio" is a text stand-in), and the
+**Manager Dashboard** shows insights, signals, provider credit usage, queue
+depth, and webhook delivery health live. The pages are static files served by
+the gateway and talk only to the public `/v1` API — the same surface a CRM
+connector will use.
+
+Note: microphone access needs a secure context (localhost or https). To demo
+from a phone, either tunnel https or use the transcript tab.
+
+## Web console (manager + salesperson)
+
+`web/` is the VoClyp console — a React/TypeScript app with two interfaces over
+the same insight data: a **manager** dashboard (the **Pitches** analytics view —
+filterable table + detail drawer with scores, signals, and coaching) and a
+**salesperson** capture screen (record a visit → it flows through the pipeline →
+shows up as a pitch insight). It talks only to the public `/v1` API.
+
+```powershell
+cd web
+npm install
+npm run dev        # http://localhost:5173  (proxies /v1 to the gateway)
+```
+
+Defaults to seed data so it renders with no backend; flip to live VoClyp data in
+the console's **Settings**. See [web/README.md](web/README.md).
+
+## Gateway without the UI
 
 ```powershell
 pip install fastapi uvicorn python-multipart
@@ -64,14 +104,19 @@ The config loader rejects any composition that violates the privacy invariant
 
 ### Production: Sarvam AI (Indian languages)
 
-The production pipeline uses Sarvam's Saarika ASR (built for Indian languages
-and code-mixed Hindi-English) and Sarvam translate:
+The production pipeline (`configs/pipeline.sarvam.json`) uses Sarvam's batch
+STT API — saaras:v3 in transcribe mode with **native speaker diarization**
+(who said what, mapped first-voice=agent) — plus Sarvam translate. It needs
+`pip install sarvamai` and the key:
 
 ```powershell
 $env:SARVAM_API_KEY = "<your key>"
 $env:VOCLYP_PIPELINE_CONFIG = "configs/pipeline.sarvam.json"
 python scripts/sarvam_check.py recording.wav   # live smoke test (uses a few credits)
 ```
+
+The synchronous Saarika stage is still registered (`asr: sarvam`) for
+low-latency single-clip use; swapping is a config edit.
 
 Language policy is data (`configs/languages.json`): Hindi + English enabled
 today; enabling Tamil/Telugu/Bengali/... later is a config edit, not code.

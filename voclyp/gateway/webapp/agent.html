@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoClyp &mdash; Field Agent</title>
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand"><a href="/app/">VoClyp</a></span>
+  <span class="tagline">field agent</span>
+  <span class="spacer"></span>
+  <nav class="nav"><a href="/app/dashboard.html">dashboard &rarr;</a></nav>
+</header>
+<main>
+  <div class="card">
+    <h2>1 &middot; Consent &amp; visit details</h2>
+    <label class="check">
+      <input type="checkbox" id="consent">
+      Customer has consented to this conversation being recorded and analyzed
+    </label>
+    <p class="muted">No consent &rarr; the platform refuses the upload (hard gate at ingestion).</p>
+    <div class="row">
+      <input type="text" id="customer-name" placeholder="Customer name (will be redacted from insights)">
+      <input type="text" id="agent-id" placeholder="Agent id" value="agent-001">
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2 &middot; Capture the conversation</h2>
+    <div class="tabs">
+      <button id="tab-record" class="active">Record audio</button>
+      <button id="tab-text">Type transcript (stub mode)</button>
+    </div>
+
+    <section id="pane-record">
+      <div class="row">
+        <button id="rec-btn" class="big primary" disabled>&#9210; Record</button>
+        <span id="rec-timer" class="timer"></span>
+      </div>
+      <p id="rec-hint" class="muted">Recording needs consent ticked, and a secure context
+        (localhost or https) for microphone access. Audio is encoded to 16&nbsp;kHz WAV in the
+        browser &mdash; the format the ASR expects.</p>
+      <audio id="rec-preview" controls hidden></audio>
+    </section>
+
+    <section id="pane-text" hidden>
+      <p class="muted">In stub mode the "audio" is a text stand-in &mdash; one line per utterance,
+        prefixed <code>AGENT:</code> / <code>CUSTOMER:</code>. Free to process, no credits used.</p>
+      <textarea id="transcript">AGENT: Ramesh Kumar ji, namaste! New stock dikhane aaya hoon.
+CUSTOMER: Aao. Purana stock abhi tak pada hai, not selling at all.
+AGENT: Is mahine scheme hai, one free piece per dozen.
+CUSTOMER: Other company is giving better margin, their scheme is bigger.
+CUSTOMER: Ye naya pack bahut costly hai. Chota pack chahiye, sachet wala.
+AGENT: Sachet next week aa raha hai. I will deliver by tomorrow ka order aaj le leta hoon.
+CUSTOMER: Theek hai, book my order for 2 boxes. Mera number 98765 43210 hai.
+AGENT: Done ji. I will call before delivery.</textarea>
+    </section>
+  </div>
+
+  <div class="card">
+    <h2>3 &middot; Submit</h2>
+    <div class="row">
+      <button id="submit-btn" class="primary" disabled>Upload &amp; process</button>
+      <span id="submit-status" class="status-line"></span>
+    </div>
+  </div>
+
+  <div class="card" id="result-card" hidden>
+    <h2>Insight</h2>
+    <div id="result"></div>
+  </div>
+</main>
+<script src="/app/common.js"></script>
+<script src="/app/agent.js"></script>
+</body>
+</html>

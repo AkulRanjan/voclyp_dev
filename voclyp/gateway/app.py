@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from ..config import Settings, load_settings
 from ..delivery import Dispatcher
@@ -38,6 +38,22 @@ _SECURITY_HEADERS = {
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
     "Content-Security-Policy": "default-src 'none'",
+}
+
+# The bundled demo web app (served under /app) needs same-origin scripts,
+# styles, and API calls — but still no third-party origins, no inline code.
+_WEBAPP_SECURITY_HEADERS = dict(_SECURITY_HEADERS, **{
+    "Content-Security-Policy": (
+        "default-src 'none'; script-src 'self'; style-src 'self'; "
+        "connect-src 'self'; img-src 'self' data:; media-src 'self' blob:"
+    ),
+})
+
+_WEBAPP_DIR = Path(__file__).resolve().parent / "webapp"
+_WEBAPP_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
 }
 
 
@@ -59,7 +75,9 @@ def create_app(data_dir=None, settings: Settings = None) -> FastAPI:
         if length and int(length) > settings.max_upload_bytes + 16384:
             return JSONResponse({"detail": "payload too large"}, status_code=413)
         response = await call_next(request)
-        response.headers.update(_SECURITY_HEADERS)
+        is_webapp = request.url.path == "/" or request.url.path.startswith("/app")
+        response.headers.update(
+            _WEBAPP_SECURITY_HEADERS if is_webapp else _SECURITY_HEADERS)
         return response
 
     @app.exception_handler(Exception)
@@ -91,6 +109,27 @@ def create_app(data_dir=None, settings: Settings = None) -> FastAPI:
                 raise HTTPException(403, f"API key lacks the '{scope}' scope")
             return auth
         return checker
+
+    # -- demo web app (static, same-origin, talks only to /v1) ---------------
+    @app.get("/", include_in_schema=False)
+    def webapp_root():
+        return RedirectResponse("/app/")
+
+    @app.get("/app/", include_in_schema=False)
+    def webapp_index():
+        return FileResponse(_WEBAPP_DIR / "index.html",
+                            media_type=_WEBAPP_TYPES[".html"])
+
+    @app.get("/app/{asset}", include_in_schema=False)
+    def webapp_asset(asset: str):
+        # Whitelist by extension and forbid any path component other than a
+        # bare filename inside the webapp directory.
+        target = _WEBAPP_DIR / asset
+        if (Path(asset).name != asset
+                or target.suffix not in _WEBAPP_TYPES
+                or not target.is_file()):
+            raise HTTPException(404, "not found")
+        return FileResponse(target, media_type=_WEBAPP_TYPES[target.suffix])
 
     @app.post("/v1/conversations", status_code=202)
     async def submit_conversation(

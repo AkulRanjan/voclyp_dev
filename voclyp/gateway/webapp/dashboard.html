@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoClyp &mdash; Dashboard</title>
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand"><a href="/app/">VoClyp</a></span>
+  <span class="tagline">manager dashboard</span>
+  <span class="spacer"></span>
+  <nav class="nav"><a href="/app/agent.html">&larr; field agent</a></nav>
+</header>
+<main>
+  <p id="dash-status" class="status-line muted">loading&hellip;</p>
+
+  <div class="statgrid" id="stats"></div>
+
+  <div class="card">
+    <h2>Conversations</h2>
+    <table>
+      <thead>
+        <tr><th>when</th><th>agent</th><th>langs</th><th>signals</th><th>summary</th></tr>
+      </thead>
+      <tbody id="insight-rows"></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="detail-card" hidden>
+    <h2 id="detail-title">Conversation</h2>
+    <div id="detail"></div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h2>Provider usage (credits)</h2>
+      <table>
+        <thead><tr><th>endpoint</th><th>calls</th><th>convs</th><th>avg/conv</th></tr></thead>
+        <tbody id="usage-rows"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Webhook delivery health</h2>
+      <table>
+        <thead><tr><th>endpoint</th><th>status</th><th>delivered</th><th>DLQ</th><th>success</th></tr></thead>
+        <tbody id="delivery-rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Pipeline stage latency</h2>
+    <table>
+      <thead><tr><th>stage</th><th>conversations</th><th>avg ms</th><th>max ms</th></tr></thead>
+      <tbody id="latency-rows"></tbody>
+    </table>
+  </div>
+</main>
+<script src="/app/common.js"></script>
+<script src="/app/dashboard.js"></script>
+</body>
+</html>

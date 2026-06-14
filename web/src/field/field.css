@@ -1,0 +1,78 @@
+.field-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 680px;
+}
+.field-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+}
+.field-card__title { font-size: 14px; font-weight: 650; margin-bottom: 12px; }
+
+.field-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+.field-check input { width: 17px; height: 17px; accent-color: var(--accent); }
+
+.field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.field-input {
+  flex: 1;
+  min-width: 180px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 13px;
+}
+.field-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.field-rec { display: flex; align-items: center; gap: 14px; }
+.field-recbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 22px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+.field-recbtn:hover:not(:disabled) { background: var(--accent-strong); }
+.field-recbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+.field-recbtn.is-rec { background: var(--red-fg); }
+.field-timer { font-size: 20px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+
+.field-preview { width: 100%; margin-top: 12px; }
+
+.field-submit { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.field-msg { font-size: 13px; }
+.field-msg--err { color: var(--red-fg); }
+.field-msg--ok { color: var(--green-fg); }
+.field-msg--busy { color: var(--text-muted); }
+.field-msg--idle { color: var(--text-muted); }
+
+.field-result {
+  margin-top: 16px;
+  background: var(--green-bg);
+  border: 1px solid var(--green-bd);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  max-width: 680px;
+}
+.field-result__note { color: var(--green-fg); font-weight: 500; font-size: 13.5px; }

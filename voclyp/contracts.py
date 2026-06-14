@@ -75,6 +75,23 @@ def build_insight(ctx: ConversationContext) -> dict:
             "normalized_to": ctx.normalized_to,
             "code_switching": ctx.code_switching,
         },
+        "speakers": {
+            "count": len({u.speaker for u in ctx.utterances
+                          if u.speaker != "unknown"}),
+            "turns": len(ctx.utterances),
+        },
+        # Redacted by the PII stage before the audio was destroyed; this is
+        # the only surviving record of what was said.
+        "transcript": [
+            {
+                "turn": i,
+                "speaker": u.speaker,
+                "text": u.text,
+                "normalized_text": u.normalized_text or u.text,
+                "languages": u.languages,
+            }
+            for i, u in enumerate(ctx.utterances)
+        ],
         "signals": [
             {
                 "type": s.type,

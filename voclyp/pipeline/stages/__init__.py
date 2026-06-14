@@ -10,6 +10,7 @@ from .signals import TaxonomySignalExtraction
 from .summarize import TaxonomySummarization
 from . import whisper_asr  # registers asr:whisper (lazy heavy imports)
 from . import sarvam_asr  # registers asr:sarvam
+from . import sarvam_batch_asr  # registers asr:sarvam_batch (diarized)
 from . import sarvam_translate  # registers lang_id_translation:sarvam
 
 __all__ = [

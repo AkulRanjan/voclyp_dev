@@ -1,0 +1,68 @@
+/* VoClyp console — design tokens + base. Neutral, light admin palette that
+   matches the reference: white surfaces, thin gray borders, ~6px radii,
+   a teal/blue accent for the active nav and primary actions. */
+
+:root {
+  /* neutrals */
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e7e9ee;
+  --border-strong: #d6dae1;
+  --text: #1f2430;
+  --text-muted: #6b7280;
+  --text-faint: #9aa1ad;
+
+  /* accent (teal/blue) */
+  --accent: #1f9d8f;
+  --accent-strong: #15806f;
+  --accent-soft: #e6f5f2;
+
+  /* semantic tones — soft bg + saturated text (chips, badges) */
+  --red-bg: #fde8e8;      --red-fg: #c0392b;      --red-bd: #f5c6c2;
+  --amber-bg: #fdf0dc;    --amber-fg: #b9791a;    --amber-bd: #f3ddb4;
+  --green-bg: #e4f6ec;    --green-fg: #1e8a55;    --green-bd: #c2e7d2;
+  --blue-bg: #e8f0fe;     --blue-fg: #2b62c4;     --blue-bd: #cdddfb;
+  --pink-bg: #fdeaf0;     --pink-fg: #c2406e;     --pink-bd: #f5cbda;
+  --purple-bg: #f0eafe;   --purple-fg: #6d44c4;   --purple-bd: #ddcdf8;
+  --gray-bg: #eef0f3;     --gray-fg: #5b6573;     --gray-bd: #dde1e7;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 1px 2px rgba(20, 24, 33, 0.06);
+  --shadow-drawer: -8px 0 28px rgba(20, 24, 33, 0.14);
+
+  --sidebar-w: 224px;
+
+  --font: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+h1, h2, h3, h4, p { margin: 0; }
+
+/* thin, unobtrusive scrollbars to match the admin feel */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+  border: 3px solid var(--surface);
+}

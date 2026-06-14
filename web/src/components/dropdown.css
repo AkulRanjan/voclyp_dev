@@ -1,0 +1,58 @@
+.dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.dropdown__select {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 36px;
+  min-width: 130px;
+  padding: 0 32px 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dropdown__select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.dropdown__select--placeholder { color: var(--text-faint); }
+
+.dropdown__chevron {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+/* date inputs share the filter-bar look */
+.filter-date {
+  position: relative;
+  display: inline-flex;
+}
+.filter-date input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  min-width: 150px;
+}
+.filter-date input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.filter-date input::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
+.filter-date input:invalid { color: var(--text-faint); }
