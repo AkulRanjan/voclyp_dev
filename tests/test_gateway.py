@@ -56,7 +56,8 @@ class GatewayTest(unittest.TestCase):
         )
 
     def test_no_key_rejected(self):
-        self.assertEqual(self.client.get("/v1/insights").status_code, 422)
+        # No credential at all -> 401 (auth required); a malformed key -> 401.
+        self.assertEqual(self.client.get("/v1/insights").status_code, 401)
         self.assertEqual(
             self.client.get("/v1/insights", headers={"X-API-Key": "vclp_x_y"}).status_code,
             401,

@@ -13,6 +13,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/v1": { target: GATEWAY, changeOrigin: true },
+      "/auth": { target: GATEWAY, changeOrigin: true },
     },
   },
   build: { outDir: "dist" },

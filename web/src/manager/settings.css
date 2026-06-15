@@ -41,3 +41,21 @@
 
 .settings-actions { display: flex; align-items: center; gap: 12px; }
 .settings-saved { color: var(--green-fg); font-size: 13px; font-weight: 600; }
+
+.settings-invite { display: flex; gap: 10px; margin-top: 14px; }
+.settings-invite input {
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: #fafbfc;
+}
+.settings-invite-err {
+  margin-top: 12px;
+  color: var(--red-fg);
+  font-size: 12.5px;
+}

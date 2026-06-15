@@ -36,11 +36,47 @@ contracts; nothing inside is reachable except through the gateway.
 | Disclosure: SSRF via webhook URLs | https-only, no URL credentials, DNS-resolved addresses must be public (blocks 127.0.0.1, RFC-1918, link-local/cloud metadata 169.254.169.254); checked at registration **and** at every send | `security.py`, gateway, `delivery.py` |
 | Disclosure: error leakage | Generic 500s; no stack traces, paths, or internals in responses | gateway |
 | **D**enial of service | Per-key rate limiting (429 + Retry-After); Content-Length precheck + body size cap; metadata field length caps; durable queue absorbs bursts, retries capped, poison jobs dead-lettered | gateway, `ingestion.py`, `queueing.py` |
-| **E**levation of privilege | Scopes per key (`ingest` / `read` / `admin`); field devices get ingest-only keys — a stolen device key cannot read a single insight or touch webhooks | gateway |
+| **E**levation of privilege | Scopes per key (`ingest` / `read` / `admin`); field devices get ingest-only keys — a stolen device key cannot read a single insight or touch webhooks. Console users authenticate with a signed session token; the **role is a signed claim** mapped to scopes server-side (`manager`→read+admin, `sales`→ingest+read), so a user cannot escalate by editing client state, and self-signup as a manager is blocked by invite-gating | gateway, `security.py`, `store.py` |
 
 Plus browser-grade response hygiene on every gateway response:
 `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, restrictive CSP.
+
+## Console authentication (operator UI)
+
+The web console (`web/`) and any first-party UI authenticate users with
+email/password and a **signed session token**, distinct from machine API keys.
+
+- **Passwords**: salted PBKDF2-SHA256 (same primitive as API keys), constant-time
+  verify, 8–256 char policy; plaintext never stored or logged.
+- **Session token**: compact HMAC-SHA256-signed claims (`sub`, `role`, `tenant`,
+  `epoch`, `iat`, `exp`), 12h TTL. It is **not** a bearer-only trust: every
+  request re-validates the token against live user state — the user must still
+  exist, the `role` claim must match the current role, and the `epoch` must
+  match the user's `session_epoch`. So role changes and logout take effect
+  immediately.
+- **Role → scope** is enforced at the gateway, server-side. The same `/v1`
+  endpoints accept *either* a tenant API key *or* a session token; both resolve
+  to a tenant + scope set. A `sales` user's token cannot call admin endpoints
+  (webhooks, metrics, delete) — verified by tests.
+- **Invite-gating**: the first account for a new organization becomes its
+  manager/owner; everyone else must redeem a single-use, manager-issued invite
+  that fixes their role. This closes self-elected-manager registration.
+- **Server-side logout / revocation**: `POST /auth/logout` bumps the user's
+  `session_epoch`, invalidating every outstanding token for that user. The same
+  mechanism backs forced logout on role change or password reset.
+- **Signing secret**: `VOCLYP_SESSION_SECRET`. If unset, it is derived from the
+  master key via HMAC domain separation (never the raw audio key); in
+  `VOCLYP_ENV=production` the gateway **fails closed** rather than fall back to
+  an ephemeral secret.
+- **Brute force**: per-(client, email) login throttle (10 / 5 min). Auth events
+  (signup, login, logout, invite) are written to the tamper-evident audit log.
+
+Residual notes: tokens live in browser `localStorage` (mitigated by a strict
+same-origin CSP — no inline scripts, `script-src 'self'`); intra-tenant reads
+are tenant-scoped, not yet per-agent (a `sales` user can read their tenant's
+insights via the API though the UI does not surface it) — per-agent read
+scoping is the next refinement.
 
 ## Key management
 
@@ -53,12 +89,20 @@ Plus browser-grade response hygiene on every gateway response:
   (`revoke_api_key` — takes effect on the next request).
 - Webhook signing secrets are per-endpoint; rotating one endpoint does not
   disturb others.
+- `VOCLYP_SESSION_SECRET` (console token signing) must be a stable 32+ byte
+  random value from the secrets manager in production — required (fail-closed)
+  when `VOCLYP_ENV=production`. Rotating it logs every console user out.
 
 ## Deployment hardening checklist (not enforced by code)
 
 - [ ] TLS 1.2+ terminated in front of the gateway (the app sets HSTS-adjacent
       headers but cannot provide transport security itself). No plaintext
       listener exposed.
+- [ ] `VOCLYP_ENV=production` and `VOCLYP_SESSION_SECRET` set (the gateway
+      refuses to start in production without a stable session secret).
+- [ ] Rate limiting and the login throttle are per-process/in-memory; front
+      with a shared limiter (or sticky sessions) when running more than one
+      gateway instance.
 - [ ] Gateway is the **only** ingress; workers, queue, and store live on a
       private network with no inbound routes.
 - [ ] Database/disk encryption (TDE or encrypted volumes) for the insight

@@ -1,6 +1,7 @@
 # VoClyp Console (web)
 
-The VoClyp web console — two interfaces over the same insight data:
+The VoClyp web console — email/password login, then two role-isolated
+interfaces over the same insight data:
 
 - **Manager** (`/manager/*`) — analytics & coaching. The **Pitches** section
   (`/manager/pitches`) is built out: a filterable, sortable table of pitch
@@ -10,7 +11,23 @@ The VoClyp web console — two interfaces over the same insight data:
   recording (16 kHz WAV), submit to the gateway, and view the resulting pitch
   insight in the same drawer the manager sees.
 
-Switch between them from the sidebar footer.
+Entry is role-first: a **welcome** screen asks *Manager* or *Sales hero*, then a
+second screen takes **email + password** (or create-account, with the role
+carried over). You land in the chosen interface and cannot navigate into the
+other. There is no in-app switch between roles — the role lives in a
+server-signed session token and is re-validated against `/auth/me`, so it can't
+be changed by editing browser storage.
+
+## Auth model
+
+- `POST /auth/signup` / `POST /auth/login` → a signed session token (HMAC, with
+  an `exp`); `GET /auth/me` returns the authoritative user/role for a token.
+- Passwords are stored only as salted PBKDF2 hashes (reusing `voclyp/security`).
+- Frontend: `auth/AuthContext` validates the token via `/auth/me` on load;
+  `RequireAuth` + `RequireRole` guards gate `/manager/*` (manager) and
+  `/field/*` (sales). Token in `localStorage`; role is never trusted from there.
+- The `/v1` data plane keeps its own tenant **API key** (set in Settings) — auth
+  gates the console; the API key authorizes data calls.
 
 ## Run
 

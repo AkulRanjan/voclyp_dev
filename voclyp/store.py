@@ -22,6 +22,7 @@ from __future__ import annotations
 import datetime
 import json
 import re
+import secrets
 import sqlite3
 import threading
 from pathlib import Path
@@ -30,6 +31,8 @@ from . import events, security
 from .contracts import utcnow
 
 _TENANT_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+USER_ROLES = ("manager", "sales")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenants (
@@ -106,7 +109,29 @@ CREATE TABLE IF NOT EXISTS feedback (
   tenant_id TEXT NOT NULL, conversation_id TEXT NOT NULL,
   target TEXT NOT NULL, correction TEXT NOT NULL, note TEXT, ts TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+  user_id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,           -- stored lowercased
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,                   -- manager | sales
+  tenant_id TEXT NOT NULL,
+  key_hash TEXT NOT NULL, salt TEXT NOT NULL,  -- PBKDF2 of the password
+  created_at TEXT NOT NULL,
+  session_epoch INTEGER NOT NULL DEFAULT 0     -- bump to revoke all sessions
+);
+CREATE TABLE IF NOT EXISTS invites (
+  invite_id TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL, salt TEXT NOT NULL,  -- PBKDF2 of the invite secret
+  tenant_id TEXT NOT NULL, role TEXT NOT NULL,
+  created_by TEXT, expires_at TEXT,
+  used INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
+);
 """
+
+# Columns added after the initial release; applied to existing databases.
+_MIGRATIONS = {
+    "users": [("session_epoch", "INTEGER NOT NULL DEFAULT 0")],
+}
 
 _GENESIS = "0" * 64
 
@@ -118,7 +143,17 @@ class Store:
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.executescript(_SCHEMA)
+        self._migrate()
         self._conn.commit()
+
+    def _migrate(self):
+        """Add columns introduced after a table first shipped (additive only)."""
+        for table, columns in _MIGRATIONS.items():
+            existing = {row[1] for row in
+                        self._conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            for name, decl in columns:
+                if name not in existing:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
     def _exec(self, sql, params=()):
         with self._lock:
@@ -187,6 +222,121 @@ class Store:
     def revoke_api_key(self, key_id):
         self._exec("UPDATE api_keys SET revoked=1 WHERE key_id=?", (key_id,))
         self.audit("-", None, "api_key_revoked", f"key_id={key_id}")
+
+    # -- console users (email/password login, role-scoped) ------------------
+    def create_user(self, email, name, role, tenant_id, password):
+        """Create a console user; the password is stored only as a salted
+        PBKDF2 hash. Returns the new user_id. Raises ValueError on bad input
+        or a duplicate email."""
+        email = (email or "").strip().lower()
+        name = (name or "").strip()
+        if role not in USER_ROLES:
+            raise ValueError("role must be 'manager' or 'sales'")
+        if not _EMAIL.match(email):
+            raise ValueError("invalid email address")
+        if not name:
+            raise ValueError("name is required")
+        if len(password or "") < 8:
+            raise ValueError("password must be at least 8 characters")
+        if self.get_user_by_email(email):
+            raise ValueError("an account with this email already exists")
+        if len(password) > 256:
+            raise ValueError("password too long")
+        user_id = "usr_" + secrets.token_hex(8)
+        salt = security.new_salt()
+        key_hash = security.hash_secret(password, bytes.fromhex(salt))
+        self._exec(
+            "INSERT INTO users (user_id, email, name, role, tenant_id, key_hash,"
+            " salt, created_at, session_epoch) VALUES (?,?,?,?,?,?,?,?,0)",
+            (user_id, email, name, role, tenant_id, key_hash, salt, utcnow()),
+        )
+        return user_id
+
+    def get_user_by_email(self, email):
+        row = self._exec(
+            "SELECT user_id, email, name, role, tenant_id, key_hash, salt, session_epoch"
+            " FROM users WHERE email=?", ((email or "").strip().lower(),),
+        ).fetchone()
+        if not row:
+            return None
+        return {"user_id": row[0], "email": row[1], "name": row[2], "role": row[3],
+                "tenant_id": row[4], "key_hash": row[5], "salt": row[6],
+                "session_epoch": row[7]}
+
+    def get_user(self, user_id):
+        """Public fields used to validate a session token against live state."""
+        row = self._exec(
+            "SELECT user_id, email, name, role, tenant_id, session_epoch"
+            " FROM users WHERE user_id=?", (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return {"user_id": row[0], "email": row[1], "name": row[2], "role": row[3],
+                "tenant_id": row[4], "session_epoch": row[5]}
+
+    def verify_user_password(self, email, password):
+        """Return the user's public fields on a correct password, else None.
+        Constant-time comparison."""
+        user = self.get_user_by_email(email)
+        if not user:
+            return None
+        if not security.verify_secret(password or "", user["salt"], user["key_hash"]):
+            return None
+        return {k: user[k] for k in
+                ("user_id", "email", "name", "role", "tenant_id", "session_epoch")}
+
+    def bump_session_epoch(self, user_id):
+        """Invalidate every outstanding session for a user (logout-all, role
+        change, password reset)."""
+        self._exec("UPDATE users SET session_epoch = session_epoch + 1"
+                   " WHERE user_id=?", (user_id,))
+
+    def user_count(self):
+        return self._exec("SELECT COUNT(*) FROM users").fetchone()[0]
+
+    def tenant_user_count(self, tenant_id):
+        return self._exec("SELECT COUNT(*) FROM users WHERE tenant_id=?",
+                          (tenant_id,)).fetchone()[0]
+
+    # -- invites (join an existing tenant; manager-issued) ------------------
+    def create_invite(self, tenant_id, role, created_by, ttl_days=14):
+        """Mint a single-use invite for a role on a tenant. The code is shown
+        once; only its salted hash is stored."""
+        if role not in USER_ROLES:
+            raise ValueError("role must be 'manager' or 'sales'")
+        invite_id = secrets.token_hex(8)
+        secret = secrets.token_urlsafe(24)
+        salt = security.new_salt()
+        expires = (datetime.datetime.now(datetime.timezone.utc)
+                   + datetime.timedelta(days=ttl_days)).isoformat()
+        self._exec(
+            "INSERT INTO invites VALUES (?,?,?,?,?,?,?,0,?)",
+            (invite_id, security.hash_secret(secret, bytes.fromhex(salt)), salt,
+             tenant_id, role, created_by, expires, utcnow()),
+        )
+        return f"vinv_{invite_id}_{secret}"
+
+    def consume_invite(self, code, tenant_id):
+        """Validate and burn an invite for tenant_id; returns its role or None."""
+        parts = (code or "").split("_", 2)
+        if len(parts) != 3 or parts[0] != "vinv":
+            return None
+        invite_id, secret = parts[1], parts[2]
+        row = self._exec(
+            "SELECT code_hash, salt, tenant_id, role, expires_at, used"
+            " FROM invites WHERE invite_id=?", (invite_id,),
+        ).fetchone()
+        if not row:
+            return None
+        code_hash, salt, inv_tenant, role, expires_at, used = row
+        if used or inv_tenant != tenant_id:
+            return None
+        if not security.verify_secret(secret, salt, code_hash):
+            return None
+        if expires_at and expires_at < utcnow():
+            return None
+        self._exec("UPDATE invites SET used=1 WHERE invite_id=?", (invite_id,))
+        return role
 
     # -- insights -----------------------------------------------------------
     def save_insight(self, tenant_id, conversation_id, doc: dict):

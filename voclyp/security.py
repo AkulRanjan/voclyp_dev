@@ -15,6 +15,7 @@ import base64
 import hashlib
 import hmac
 import ipaddress
+import json
 import os
 import secrets
 import socket
@@ -62,6 +63,52 @@ def verify_secret(secret: str, salt_hex: str, expected_hash_hex: str) -> bool:
 
 def new_salt() -> str:
     return os.urandom(16).hex()
+
+
+# -- session tokens (console login) -------------------------------------------
+# A compact signed token (like a minimal JWT): base64url(JSON claims).base64url
+# (HMAC-SHA256). The signature is what makes the ``role`` claim tamper-proof —
+# a client cannot change its role without invalidating the token, so role-based
+# access can't be forged by editing browser storage.
+
+def _b64u(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _b64u_decode(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def _session_secret(secret) -> bytes:
+    return secret if isinstance(secret, (bytes, bytearray)) else str(secret).encode("utf-8")
+
+
+def issue_session_token(claims: dict, secret, ttl_seconds: int = 43_200) -> str:
+    """Sign claims into a token valid for ttl_seconds (default 12h)."""
+    data = dict(claims)
+    data["exp"] = int(time.time()) + int(ttl_seconds)
+    body = _b64u(json.dumps(data, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+    sig = _b64u(hmac.new(_session_secret(secret), body.encode("ascii"), hashlib.sha256).digest())
+    return f"{body}.{sig}"
+
+
+def verify_session_token(token: str, secret) -> dict | None:
+    """Return the claims if the signature is valid and the token is unexpired,
+    else None. Signature check is constant-time."""
+    try:
+        body, sig = str(token).split(".", 1)
+    except (ValueError, AttributeError):
+        return None
+    expected = _b64u(hmac.new(_session_secret(secret), body.encode("ascii"), hashlib.sha256).digest())
+    if not hmac.compare_digest(expected, sig):
+        return None
+    try:
+        claims = json.loads(_b64u_decode(body))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if int(claims.get("exp", 0)) < int(time.time()):
+        return None
+    return claims
 
 
 # -- webhook signing ----------------------------------------------------------

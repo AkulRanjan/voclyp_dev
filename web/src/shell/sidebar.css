@@ -122,6 +122,9 @@
   font-weight: 600;
   color: var(--text);
 }
+.sidebar__usermeta { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.sidebar__username { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar__userrole { font-weight: 500; font-size: 11px; color: var(--text-faint); }
 .sidebar__avatar {
   display: inline-flex;
   align-items: center;

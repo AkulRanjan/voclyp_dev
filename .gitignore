@@ -1,8 +1,10 @@
 __pycache__/
 *.pyc
-data/
+# runtime data dir at the repo root only — NOT web/src/data (anchored with /)
+/data/
 *.db
 .venv/
-dist/
+/dist/
+web/dist/
 *.egg-info/
 .claude/

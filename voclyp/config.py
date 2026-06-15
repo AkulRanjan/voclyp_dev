@@ -13,6 +13,9 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Settings:
     data_dir: str = "data"
+    # deployment environment. In "production" the gateway fails closed when a
+    # stable session-signing secret is not configured (no ephemeral fallback).
+    env: str = "development"
     # ingestion guardrails
     max_upload_bytes: int = 100 * 1024 * 1024
     max_metadata_field_len: int = 256
@@ -34,12 +37,17 @@ class Settings:
     # Sarvam AI subscription key (SARVAM_API_KEY) — required only when the
     # pipeline config selects sarvam implementations.
     sarvam_api_key: str = ""
+    # Secret used to sign console session tokens (VOCLYP_SESSION_SECRET). Empty
+    # falls back to the master key, then to an ephemeral per-process secret
+    # (logs everyone out on restart). Production: a stable random secret.
+    session_secret: bytes = b""
 
 
 def load_settings() -> Settings:
     env = os.environ
     return Settings(
         data_dir=env.get("VOCLYP_DATA_DIR", "data"),
+        env=env.get("VOCLYP_ENV", "development").strip().lower(),
         max_upload_bytes=int(env.get("VOCLYP_MAX_UPLOAD_BYTES", 100 * 1024 * 1024)),
         max_metadata_field_len=int(env.get("VOCLYP_MAX_METADATA_FIELD_LEN", 256)),
         chunk_bytes=int(env.get("VOCLYP_CHUNK_BYTES", 10 * 1024 * 1024)),
@@ -49,4 +57,5 @@ def load_settings() -> Settings:
         allow_insecure_webhooks=env.get("VOCLYP_ALLOW_INSECURE_WEBHOOKS") == "1",
         public_base_url=env.get("VOCLYP_PUBLIC_BASE_URL", ""),
         sarvam_api_key=env.get("SARVAM_API_KEY", ""),
+        session_secret=env.get("VOCLYP_SESSION_SECRET", "").encode("utf-8"),
     )

@@ -61,11 +61,16 @@ from a phone, either tunnel https or use the transcript tab.
 
 ## Web console (manager + salesperson)
 
-`web/` is the VoClyp console — a React/TypeScript app with two interfaces over
-the same insight data: a **manager** dashboard (the **Pitches** analytics view —
-filterable table + detail drawer with scores, signals, and coaching) and a
-**salesperson** capture screen (record a visit → it flows through the pipeline →
-shows up as a pitch insight). It talks only to the public `/v1` API.
+`web/` is the VoClyp console — a React/TypeScript app with email/password login
+and two role-isolated interfaces over the same insight data: a **manager**
+dashboard (the **Pitches** analytics view — filterable table + detail drawer
+with scores, signals, and coaching) and a **salesperson** capture screen
+(record a visit → it flows through the pipeline → shows up as a pitch insight).
+
+Sign up as a *Manager* or *Sales hero*; the role is carried in a server-signed
+session token (`/auth/*`), so the two interfaces are genuinely isolated — a
+sales user can't reach manager screens and vice versa (enforced by route guards
+that validate the token's role against the server, not by client state).
 
 ```powershell
 cd web
@@ -89,6 +94,9 @@ Or run the whole platform (gateway + worker) as one artifact:
 $env:VOCLYP_MASTER_KEY = "<from your KMS>"
 docker compose up
 ```
+
+For a private-cloud deployment on AWS (VPC, ECS Fargate, RDS/S3/SQS, secrets,
+TLS), see **[docs/DEPLOY-AWS.md](docs/DEPLOY-AWS.md)**.
 
 ### Swapping in real models
 

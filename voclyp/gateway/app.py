@@ -19,6 +19,10 @@ Run:  uvicorn voclyp.gateway.app:app  (set VOCLYP_DATA_DIR / VOCLYP_MASTER_KEY)
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import re
+import secrets
 import time
 from pathlib import Path
 
@@ -29,7 +33,12 @@ from ..config import Settings, load_settings
 from ..delivery import Dispatcher
 from ..ingestion import ConsentRequired, IngestionService, ValidationError
 from ..queueing import JobQueue
-from ..security import AudioVault, check_webhook_url
+from ..security import (
+    AudioVault,
+    check_webhook_url,
+    issue_session_token,
+    verify_session_token,
+)
 from ..store import Store
 
 _SECURITY_HEADERS = {
@@ -65,9 +74,38 @@ def create_app(data_dir=None, settings: Settings = None) -> FastAPI:
     vault = AudioVault(settings.master_key)
     ingestion = IngestionService(store, queue, data_dir / "audio", vault, settings)
 
+    # Console session-token signing secret. Precedence:
+    #   1. an explicit VOCLYP_SESSION_SECRET (production)
+    #   2. derived from the master key via HMAC domain separation, so the
+    #      token-signing key is NOT the raw audio-encryption key
+    #   3. an ephemeral per-process secret (dev only; logs everyone out on
+    #      restart). In production this path fails closed.
+    if settings.session_secret:
+        session_secret = settings.session_secret
+    elif settings.master_key:
+        session_secret = hmac.new(
+            settings.master_key, b"voclyp/session-token/v1", hashlib.sha256
+        ).digest()
+    elif settings.env == "production":
+        raise RuntimeError(
+            "refusing to start in production without VOCLYP_SESSION_SECRET "
+            "(or VOCLYP_MASTER_KEY) — session tokens would be unsigned-by-default"
+        )
+    else:
+        session_secret = secrets.token_bytes(32)
+    SESSION_TTL_S = 12 * 3600
+
+    # role -> API scopes. The signed role claim is the source of truth, so a
+    # console user can only do what their role permits, server-side.
+    ROLE_SCOPES = {
+        "manager": ("read", "admin"),
+        "sales": ("ingest", "read"),
+    }
+
     app = FastAPI(title="VoClyp Gateway", version="0.2.0")
     app.state.store, app.state.queue, app.state.vault = store, queue, vault
     app.state.rate_buckets = {}
+    app.state.login_attempts = {}
 
     @app.middleware("http")
     async def hardening(request: Request, call_next):
@@ -96,19 +134,154 @@ def create_app(data_dir=None, settings: Settings = None) -> FastAPI:
             )
         bucket.append(now)
 
-    def principal(x_api_key: str = Header(...)) -> dict:
-        auth = store.authenticate(x_api_key)
-        if auth is None:
-            raise HTTPException(401, "invalid, expired, or revoked API key")
-        _rate_limit(auth["key_id"])
-        return auth
+    def _session_claims(authorization: str) -> dict | None:
+        """Verify a Bearer session token AND re-check it against live user state
+        (existence, current role, session epoch) so revoked or role-changed
+        tokens stop working immediately — the token alone is never trusted."""
+        prefix = "Bearer "
+        if not (authorization or "").startswith(prefix):
+            return None
+        claims = verify_session_token(authorization[len(prefix):], session_secret)
+        if claims is None:
+            return None
+        user = store.get_user(claims.get("sub", ""))
+        if user is None:
+            return None
+        if claims.get("epoch") != user["session_epoch"]:
+            return None  # revoked (logout-all / role change / password reset)
+        if claims.get("role") != user["role"]:
+            return None  # role changed since the token was issued
+        return {**claims, "tenant": user["tenant_id"], "role": user["role"]}
+
+    def current_user(authorization: str = Header(None)) -> dict:
+        claims = _session_claims(authorization)
+        if claims is None:
+            raise HTTPException(401, "not authenticated")
+        return claims
+
+    def principal(x_api_key: str = Header(None),
+                  authorization: str = Header(None)) -> dict:
+        """A request is authorized by EITHER a tenant API key (machine clients)
+        OR a console session token (logged-in users). Both resolve to a tenant
+        and a scope set; downstream authorization is scope-based and identical."""
+        if x_api_key:
+            auth = store.authenticate(x_api_key)
+            if auth is None:
+                raise HTTPException(401, "invalid, expired, or revoked API key")
+            _rate_limit("key:" + auth["key_id"])
+            return {"tenant_id": auth["tenant_id"], "scopes": list(auth["scopes"]),
+                    "subject": "key:" + auth["key_id"]}
+        claims = _session_claims(authorization)
+        if claims is not None:
+            _rate_limit("user:" + claims["sub"])
+            return {"tenant_id": claims["tenant"],
+                    "scopes": list(ROLE_SCOPES.get(claims["role"], ())),
+                    "role": claims["role"], "user_id": claims["sub"],
+                    "subject": "user:" + claims["sub"]}
+        raise HTTPException(401, "authentication required (API key or session)")
 
     def require(scope: str):
         def checker(auth: dict = Depends(principal)) -> dict:
             if scope not in auth["scopes"]:
-                raise HTTPException(403, f"API key lacks the '{scope}' scope")
+                raise HTTPException(403, f"not permitted: missing '{scope}' scope")
             return auth
         return checker
+
+    # -- console authentication (email/password, signed role token) ----------
+    def _slug(text: str) -> str:
+        s = re.sub(r"[^a-z0-9]+", "-", (text or "").strip().lower()).strip("-")
+        return s[:63] if re.match(r"^[a-z0-9][a-z0-9-]{1,62}$", s[:63]) else ""
+
+    def _login_throttle(request: Request, email: str):
+        # Cheap brute-force brake: cap attempts per (client, email) per window.
+        ident = f"{request.client.host if request.client else '?'}:{email}"
+        now = time.monotonic()
+        attempts = app.state.login_attempts.setdefault(ident, [])
+        attempts[:] = [t for t in attempts if now - t < 300]
+        if len(attempts) >= 10:
+            raise HTTPException(429, "too many login attempts; try again later",
+                                headers={"Retry-After": "300"})
+        attempts.append(now)
+
+    def _session_payload(user: dict) -> dict:
+        claims = {
+            "sub": user["user_id"],
+            "email": user["email"],
+            "name": user["name"],
+            "role": user["role"],
+            "tenant": user["tenant_id"],
+            "epoch": user["session_epoch"],  # revocation marker
+            "iat": int(time.time()),
+        }
+        token = issue_session_token(claims, session_secret, SESSION_TTL_S)
+        return {"token": token, "user": {k: claims[k] for k in
+                ("email", "name", "role", "tenant")}}
+
+    @app.post("/auth/signup", status_code=201)
+    async def signup(request: Request):
+        body = await request.json()
+        org = str(body.get("org", "") or "VoClyp Demo")
+        tenant_id = _slug(org) or "voclyp-demo"
+        email = str(body.get("email", ""))
+
+        if store.tenant_industry(tenant_id) is None:
+            # First account for a brand-new org becomes its manager/owner.
+            store.create_tenant(tenant_id, org.strip() or "VoClyp Demo", "fmcg")
+            role = "manager"
+        elif store.tenant_user_count(tenant_id) == 0:
+            role = "manager"  # seeded tenant, first human owns it
+        else:
+            # Joining an existing team requires a manager-issued invite; the
+            # invite fixes the role, so no one can self-elect to manager.
+            role = store.consume_invite(str(body.get("invite", "")), tenant_id)
+            if role is None:
+                raise HTTPException(
+                    403, "joining this organization requires a valid invite")
+        try:
+            user_id = store.create_user(email, body.get("name", ""), role,
+                                        tenant_id, str(body.get("password", "")))
+            user = store.verify_user_password(email, str(body.get("password", "")))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        store.audit(tenant_id, None, "user_signup", f"user={user_id} role={role}")
+        return _session_payload(user)
+
+    @app.post("/auth/login")
+    async def login(request: Request):
+        body = await request.json()
+        email = str(body.get("email", ""))
+        _login_throttle(request, email.strip().lower())
+        user = store.verify_user_password(email, str(body.get("password", "")))
+        if user is None:
+            raise HTTPException(401, "invalid email or password")
+        store.audit(user["tenant_id"], None, "user_login", f"user={user['user_id']}")
+        return _session_payload(user)
+
+    @app.post("/auth/logout")
+    def logout(claims: dict = Depends(current_user)):
+        # Server-side logout: invalidate every outstanding token for this user.
+        store.bump_session_epoch(claims["sub"])
+        store.audit(claims["tenant"], None, "user_logout", f"user={claims['sub']}")
+        return {"ok": True}
+
+    @app.get("/auth/me")
+    def auth_me(claims: dict = Depends(current_user)):
+        return {"user": {k: claims.get(k) for k in ("email", "name", "role", "tenant")}}
+
+    @app.post("/auth/invite", status_code=201)
+    async def make_invite(request: Request, claims: dict = Depends(current_user)):
+        # Only a manager may invite teammates, and only into their own tenant.
+        if claims["role"] != "manager":
+            raise HTTPException(403, "only managers can create invites")
+        body = await request.json()
+        try:
+            code = store.create_invite(
+                claims["tenant"], str(body.get("role", "sales")), claims["sub"])
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        store.audit(claims["tenant"], None, "invite_created",
+                    f"by={claims['sub']} role={body.get('role', 'sales')}")
+        return {"invite": code, "tenant": claims["tenant"]}
 
     # -- demo web app (static, same-origin, talks only to /v1) ---------------
     @app.get("/", include_in_schema=False)

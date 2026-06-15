@@ -6,12 +6,7 @@ import "./layout.css";
 export function ManagerLayout() {
   return (
     <div className="app">
-      <Sidebar
-        nav={MANAGER_NAV}
-        interfaceLabel="Manager"
-        switchTo="/field"
-        switchLabel="Switch to Salesperson"
-      />
+      <Sidebar nav={MANAGER_NAV} interfaceLabel="Manager" />
       <main className="app__main">
         <Outlet />
       </main>
@@ -22,12 +17,7 @@ export function ManagerLayout() {
 export function FieldLayout() {
   return (
     <div className="app">
-      <Sidebar
-        nav={FIELD_NAV}
-        interfaceLabel="Salesperson"
-        switchTo="/manager/pitches"
-        switchLabel="Switch to Manager"
-      />
+      <Sidebar nav={FIELD_NAV} interfaceLabel="Salesperson" />
       <main className="app__main">
         <Outlet />
       </main>

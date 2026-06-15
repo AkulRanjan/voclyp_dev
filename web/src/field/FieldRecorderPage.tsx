@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "../components/Button";
 import { Icon } from "../components/Icon";
-import { getApiKey } from "../data/api";
+import { authHeaders, getToken } from "../data/auth";
 import { insightToPitchRow } from "../data/voclypAdapter";
 import type { InsightDoc } from "../data/api";
 import { PitchDrawer } from "../manager/pitches/PitchDrawer";
@@ -27,7 +27,7 @@ export function FieldRecorderPage() {
   const canSubmit = consent && wav !== null && !recording && status.kind !== "busy";
 
   const hint = useMemo(() => {
-    if (!getApiKey()) return "Set the gateway API key in Settings before submitting.";
+    if (!getToken()) return "Your session has expired — sign in again.";
     if (!consent) return "Tick consent to enable recording.";
     if (!wav && !recording) return "Record the visit, then submit.";
     return "";
@@ -46,7 +46,7 @@ export function FieldRecorderPage() {
     try {
       const resp = await fetch("/v1/conversations", {
         method: "POST",
-        headers: { "X-API-Key": getApiKey() },
+        headers: authHeaders(),
         body: form,
       });
       if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
@@ -61,7 +61,7 @@ export function FieldRecorderPage() {
   async function poll(id: string) {
     for (let i = 0; i < 90; i++) {
       await new Promise((r) => setTimeout(r, 2000));
-      const resp = await fetch("/v1/insights/" + id, { headers: { "X-API-Key": getApiKey() } });
+      const resp = await fetch("/v1/insights/" + id, { headers: authHeaders() });
       if (resp.status === 200) {
         const doc = (await resp.json()) as InsightDoc;
         setResult(insightToPitchRow(doc));
