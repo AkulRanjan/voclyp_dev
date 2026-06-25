@@ -169,13 +169,13 @@ voclyp/
 ### Front-ends (each is a separate app)
 
 ```
-voclyp-mobile/   Agent app (Expo / React Native) — the field tool. Consent +
-                 name/number capture, record a visit, then see notes, objections,
-                 coaching, recommended mattresses, and the visit score.
-web/             Manager console (React + Vite). One codebase, role-isolated
-                 views: manager / store_manager / area_manager / admin.
-src/ + root      Marketing website (Next.js, package name "voclyp-app"): the
- (next.config.ts, public/, package.json)   public site (Hero, Pricing, FAQ, …).
+voclyp-mobile/     Agent app (Expo / React Native) — the field tool. Consent +
+                   name/number capture, record a visit, then see notes,
+                   objections, coaching, recommended mattresses, and the score.
+web/               Manager console (React + Vite). One codebase, role-isolated
+                   views: manager / store_manager / area_manager / admin.
+apps/marketing/    Marketing website (Next.js, "voclyp-app") — the public site
+                   (Hero, Pricing, FAQ, …). Run: cd apps/marketing && npm run dev
 ```
 
 ### Shared / supporting
