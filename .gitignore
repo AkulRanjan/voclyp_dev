@@ -8,3 +8,20 @@ __pycache__/
 web/dist/
 *.egg-info/
 .claude/
+node_modules
+# secrets — local dev env files (real keys live here; never commit)
+.env
+.env.*
+!.env.example
+# Expo local state
+.expo/
+# Next.js build output + generated types (marketing site)
+.next/
+next-env.d.ts
+*.tsbuildinfo
+# build / tooling caches
+.pytest_cache/
+dist/
+# scratch QR / screenshots
+expo-qr.png
+*.local.png

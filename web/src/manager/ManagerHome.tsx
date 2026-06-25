@@ -48,11 +48,13 @@ export function ManagerHome() {
 
       <div className="home-cta">
         <p>
-          Review pitch quality, signals, and coaching for every field
-          conversation.
+          Watch live visits on the floor or compare store performance across your territory.
         </p>
-        <Link to="/manager/pitches" className="home-cta__link">
-          Open Pitches →
+        <Link to="/manager/live" className="home-cta__link">
+          Live floor →
+        </Link>
+        <Link to="/manager/stores" className="home-cta__link" style={{ marginLeft: "1rem" }}>
+          Store comparison →
         </Link>
       </div>
     </div>

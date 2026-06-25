@@ -1,0 +1,176 @@
+.live-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.live-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  background: var(--surface);
+}
+
+.live-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.live-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+}
+
+.live-badge--identity {
+  background: #ffb34733;
+  color: #92400e;
+}
+
+.live-badge--active {
+  background: #3d2bff1a;
+  color: var(--brand-indigo);
+}
+
+.live-card__store {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.live-card__name {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.live-card__phone,
+.live-card__meta {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin: 0.35rem 0 0;
+}
+
+.stores-table-wrap {
+  overflow-x: auto;
+}
+
+.stores-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.stores-table th,
+.stores-table td {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.stores-table th {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.stores-link {
+  color: var(--brand-indigo);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.stores-link:hover {
+  text-decoration: underline;
+}
+
+.stores-muted {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.stores-error {
+  color: #dc2626;
+  font-size: 0.875rem;
+}
+
+.stores-back {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  text-decoration: none;
+  display: inline-block;
+  margin-bottom: 0.5rem;
+}
+
+.store-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.store-stat {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  background: var(--surface);
+}
+
+.store-stat__val {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--brand-indigo);
+}
+
+.store-stat__lbl {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.stores-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 2rem 0 1rem;
+}
+
+.visit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.visit-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  background: var(--surface);
+}
+
+.visit-card__summary {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.visit-card__meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+@media (min-width: 768px) {
+  .live-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .live-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

@@ -88,3 +88,33 @@ class JobQueue:
                 "SELECT status, COUNT(*) FROM jobs GROUP BY status"
             ).fetchall()
         return dict(rows)
+
+    def lookup(self, tenant_id: str, conversation_id: str) -> dict | None:
+        """Latest queue row for a conversation, if any."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT status, attempts FROM jobs"
+                " WHERE tenant_id=? AND conversation_id=?"
+                " ORDER BY id DESC LIMIT 1",
+                (tenant_id, conversation_id),
+            ).fetchone()
+        if not row:
+            return None
+        return {"status": row[0], "attempts": row[1]}
+
+    def requeue_dead(self, conversation_id: str) -> bool:
+        """Reset the latest dead job for a conversation back to pending."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id FROM jobs WHERE conversation_id=? AND status='dead'"
+                " ORDER BY id DESC LIMIT 1",
+                (conversation_id,),
+            ).fetchone()
+            if not row:
+                return False
+            self._conn.execute(
+                "UPDATE jobs SET status='pending', attempts=0, updated_at=? WHERE id=?",
+                (utcnow(), row[0]),
+            )
+            self._conn.commit()
+        return True

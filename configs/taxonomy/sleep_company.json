@@ -1,0 +1,56 @@
+{
+  "industry": "sleep_company",
+  "extends": "base",
+  "version": "1.0",
+  "description": "Mattress and sleep retail: orthopaedic needs, trials, EMI, competitor sagging, warranty.",
+  "signals": {
+    "objection": {
+      "patterns": [
+        { "subtype": "budget_too_high", "any": ["budget", "too expensive", "costly", "cannot afford", "price high", "bajat"] },
+        { "subtype": "warranty_concern", "any": ["warranty", "guarantee", "sagging", "dhans", "sink", "durability"] },
+        { "subtype": "firmness_mismatch", "any": ["too soft", "too hard", "firmness", "not comfortable"] }
+      ]
+    },
+    "intent": {
+      "patterns": [
+        { "subtype": "purchase_intent", "any": ["buy today", "le lunga", "book order", "take it", "ready to buy", "खरीद", "ले लूंगा", "ऑर्डर"] },
+        { "subtype": "trial_request", "any": ["trial", "try first", "test sleep", "100 night", "return policy", "ट्रायल", "आज़माना"] },
+        { "subtype": "emi_request", "any": ["emi", "installment", "monthly", "no cost emi", "finance", "किस्त", "ईएमआई"] }
+      ]
+    },
+    "demand": {
+      "patterns": [
+        { "subtype": "orthopaedic_need", "any": ["back pain", "orthopaedic", "spine", "doctor suggested", "piith", "ortho", "कमर", "पीठ", "दर्द", "orthopedic"] },
+        { "subtype": "cooling_need", "any": ["cooling", "hot sleeper", "gel", "temperature", "गर्मी", "ठंडा"] },
+        { "subtype": "firmness_preference", "any": ["firm", "medium firm", "soft", "dual comfort", "कठोर", "नरम", "फर्म"] }
+      ]
+    },
+    "competitor_mention": {
+      "patterns": [
+        { "subtype": "local_brand_sagging", "any": ["local brand", "neighbour bought", "sagged", "six months", "padosi"] },
+        { "subtype": "competitor_brand", "any": ["wakefit", "duroflex", "kurlon", "other brand", "competitor"] }
+      ]
+    },
+    "price_reaction": {
+      "patterns": [
+        { "subtype": "budget_sensitive", "any": ["budget", "value for money", "best deal", "discount", "offer"] },
+        { "subtype": "emi_interest", "any": ["emi", "monthly payment", "installment plan"] }
+      ]
+    },
+    "promise": {
+      "patterns": [
+        { "subtype": "delivery_promise", "any": ["deliver tomorrow", "home delivery", "same day"] },
+        { "subtype": "follow_up_promise", "any": ["call back", "follow up", "send quote", "whatsapp details"] }
+      ]
+    }
+  },
+  "summary_fields": [
+    { "name": "orthopaedic_need", "from": "signal_present", "signal": "demand", "subtype": "orthopaedic_need" },
+    { "name": "trial_request", "from": "signal_present", "signal": "intent", "subtype": "trial_request" },
+    { "name": "emi_request", "from": "signal_present", "signal": "intent", "subtype": "emi_request" },
+    { "name": "competitor_sagging", "from": "signal_present", "signal": "competitor_mention", "subtype": "local_brand_sagging" },
+    { "name": "buying_readiness", "from": "signal_present", "signal": "intent", "subtype": "purchase_intent" },
+    { "name": "objection_summary", "from": "signal_quotes", "signal": "objection" },
+    { "name": "recommended_skus", "from": "signal_quotes", "signal": "demand" }
+  ]
+}

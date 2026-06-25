@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button } from "../components/Button";
 import { Icon } from "../components/Icon";
+import { useAuth } from "../auth/AuthContext";
 import { authHeaders, getToken } from "../data/auth";
 import { insightToPitchRow } from "../data/voclypAdapter";
 import type { InsightDoc } from "../data/api";
@@ -16,10 +17,10 @@ type Status = { kind: "idle" | "busy" | "ok" | "err"; text: string };
 // VoClyp gateway, then show the resulting pitch insight in the same drawer the
 // manager sees — closing the loop end to end.
 export function FieldRecorderPage() {
+  const { user } = useAuth();
   const { recording, elapsed, wav, error, start, stop, reset } = useRecorder();
   const [consent, setConsent] = useState(false);
   const [customer, setCustomer] = useState("");
-  const [agentId, setAgentId] = useState("agent-001");
   const [status, setStatus] = useState<Status>({ kind: "idle", text: "" });
   const [result, setResult] = useState<PitchRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -39,7 +40,8 @@ export function FieldRecorderPage() {
     setStatus({ kind: "busy", text: "Uploading…" });
     const form = new FormData();
     form.append("audio", wav, "recording.wav");
-    form.append("agent_id", agentId || "agent-001");
+    form.append("agent_id", user?.user_id || user?.email || "sales");
+    form.append("store_id", "tsc-andheri");
     form.append("client_ref", "web-" + crypto.randomUUID());
     form.append("consent_captured", "true");
     form.append("customer_name", customer);
@@ -49,9 +51,12 @@ export function FieldRecorderPage() {
         headers: authHeaders(),
         body: form,
       });
-      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
+      if (!resp.ok) {
+        const detail = (await resp.json().catch(() => ({}))).detail;
+        throw new Error(detail || resp.statusText || "Upload failed");
+      }
       const { conversation_id } = (await resp.json()) as { conversation_id: string };
-      setStatus({ kind: "busy", text: `Queued ${conversation_id} — processing…` });
+      setStatus({ kind: "busy", text: `Queued ${conversation_id} — real transcription (1–3 min)…` });
       await poll(conversation_id);
     } catch (e) {
       setStatus({ kind: "err", text: e instanceof Error ? e.message : String(e) });
@@ -59,7 +64,7 @@ export function FieldRecorderPage() {
   }
 
   async function poll(id: string) {
-    for (let i = 0; i < 90; i++) {
+    for (let i = 0; i < 180; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       const resp = await fetch("/v1/insights/" + id, { headers: authHeaders() });
       if (resp.status === 200) {
@@ -74,7 +79,7 @@ export function FieldRecorderPage() {
         setStatus({ kind: "err", text: "Error " + resp.status });
         return;
       }
-      setStatus({ kind: "busy", text: `Processing… (${(i + 1) * 2}s — is the worker running?)` });
+      setStatus({ kind: "busy", text: `Processing… (${(i + 1) * 2}s)` });
     }
     setStatus({ kind: "err", text: "Timed out waiting for the insight." });
   }
@@ -102,13 +107,10 @@ export function FieldRecorderPage() {
               value={customer}
               onChange={(e) => setCustomer(e.target.value)}
             />
-            <input
-              className="field-input"
-              placeholder="Agent id"
-              value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-            />
           </div>
+          <p className="field-msg field-msg--idle">
+            Signed in as {user?.name || user?.email} · store tsc-andheri
+          </p>
         </div>
 
         <div className="field-card">

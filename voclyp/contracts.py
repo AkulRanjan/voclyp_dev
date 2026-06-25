@@ -9,6 +9,8 @@ import datetime
 from dataclasses import dataclass, field
 from typing import Optional
 
+from .scoring import score_conversation
+
 SCHEMA_VERSION = "1.0"
 
 
@@ -22,6 +24,9 @@ class Utterance:
     speaker: str = "unknown"       # agent | customer | unknown
     normalized_text: str = ""      # common working language (redacted in place)
     languages: list = field(default_factory=list)
+    speaker_id: str = ""           # raw diarization id from ASR (e.g. "0", "1")
+    start_time: float = 0.0
+    end_time: float = 0.0
 
 
 @dataclass
@@ -43,8 +48,17 @@ class ConversationContext:
     industry: str
     audio_paths: list                  # one or more chunks, in order
     agent_id: str = ""
+    store_id: str = ""             # which store this conversation belongs to
     consent_captured: bool = False
     customer_name: str = ""        # from consent form; consumed by redaction, then cleared
+
+    # Speaker identity (set by the speaker_id stage from the rep's enrolled
+    # voiceprint). rep_name labels the agent turns; the verification fields
+    # record whether the agent voice matched the enrolled profile.
+    rep_name: str = ""
+    agent_voiceprint: list = field(default_factory=list)
+    agent_voice_similarity: Optional[float] = None
+    agent_voice_verified: bool = False
 
     utterances: list = field(default_factory=list)
     detected_languages: list = field(default_factory=list)
@@ -70,6 +84,7 @@ def build_insight(ctx: ConversationContext) -> dict:
         "conversation_id": ctx.conversation_id,
         "industry": ctx.industry,
         "agent_id": ctx.agent_id,
+        "store_id": ctx.store_id,
         "languages": {
             "detected": ctx.detected_languages,
             "normalized_to": ctx.normalized_to,
@@ -79,6 +94,11 @@ def build_insight(ctx: ConversationContext) -> dict:
             "count": len({u.speaker for u in ctx.utterances
                           if u.speaker != "unknown"}),
             "turns": len(ctx.utterances),
+            # display labels for the diarized speaker tokens: the rep is named
+            # from the enrolled voiceprint; customers stay de-identified.
+            "names": {"agent": ctx.rep_name or "Sales rep", "customer": "Customer"},
+            "agent_voice_verified": ctx.agent_voice_verified,
+            "agent_voice_similarity": ctx.agent_voice_similarity,
         },
         # Redacted by the PII stage before the audio was destroyed; this is
         # the only surviving record of what was said.
@@ -89,6 +109,8 @@ def build_insight(ctx: ConversationContext) -> dict:
                 "text": u.text,
                 "normalized_text": u.normalized_text or u.text,
                 "languages": u.languages,
+                **({"start_time": u.start_time, "end_time": u.end_time}
+                   if u.end_time > u.start_time else {}),
             }
             for i, u in enumerate(ctx.utterances)
         ],
@@ -103,6 +125,9 @@ def build_insight(ctx: ConversationContext) -> dict:
             }
             for s in ctx.signals
         ],
+        # Deterministic, explainable score over the extracted signals; the
+        # comparable measure every dashboard and ranking aggregates on.
+        "scoring": score_conversation(ctx.signals),
         "summary": {"text": ctx.summary_text, "fields": ctx.summary_fields},
         "privacy": {
             "consent_captured": ctx.consent_captured,

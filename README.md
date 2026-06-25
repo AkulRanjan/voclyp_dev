@@ -12,6 +12,8 @@ External consumers integrate through the **event rails** (SYS-ARCH-02 §3–4):
 thin signed webhook events (`contracts/event-envelope/v1/`) for triggering,
 the authenticated REST API for fetching — never insight content in the pipe.
 
+**To run it locally (backend + web console), see [docs/RUNNING.md](docs/RUNNING.md).**
+
 Read **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the system diagrams,
 **[docs/BUILD-MAP.md](docs/BUILD-MAP.md)** for what is built, where, and in what
 order, and **[docs/SECURITY.md](docs/SECURITY.md)** for the threat model and
@@ -132,39 +134,95 @@ Credit discipline is built in: already-English utterances skip the translate
 call, and every provider call is metered per conversation
 (`GET /v1/metrics` → `provider_usage`).
 
-## Layout
+## Repository layout
+
+VoClyp is **one backend + three front-ends**. Each front-end runs on its own and
+talks to the same gateway API — there is no shared build between them.
+
+### Backend — `voclyp/` (Python, the platform)
 
 ```
-contracts/insight-schema/v1/   the output contract (JSON Schema)
-contracts/event-envelope/v1/   the webhook event contract (thin payloads)
-configs/taxonomy/              base + per-industry signal packs (fmcg, pharma)
 voclyp/
-  gateway/                     API gateway: auth, rate limit, tenant routing,
-                               webhook endpoint management + DLQ replay
-  ingestion.py                 consent check, validate, store audio, enqueue
-  queueing.py                  durable job queue (retries, dead-letter)
-  pipeline/                    Stage contract + runner
-    stages/                    asr, diarization, translation, redaction,
-                               audio_delete, signals, summarize
-  worker.py                    leases jobs, runs the pipeline, stores + emits
-  store.py                     tenant-scoped insights/audit/consent/webhooks,
-                               transactional outbox, delivery ledger
-  events.py                    canonical event envelope (UUIDv7, sequence)
-  delivery.py                  dispatcher: fan-out, signing, retries, DLQ
-scripts/demo.py                one conversation, end to end
-tests/                         end-to-end tests
+  gateway/app.py        the one secure way in: auth, live sessions, insights,
+                        webhook management + DLQ replay
+    webapp/             legacy bundled browser UI served at "/" (quick demos only)
+  live/                 real-time consent capture — streaming ASR + correction-
+                        aware name/phone extraction (entities.py, streaming_asr.py)
+  pipeline/             stage contract + runner
+    stages/             swappable AI stages: asr, diarization, translation,
+                        redaction, audio_delete, signals, summarize / visit-notes,
+                        speaker_id  (privacy invariant: redact → destroy audio → analyze)
+  providers/sarvam.py   Sarvam AI client (Indian-language ASR, translate, chat)
+  catalog.py            the 5-mattress product catalog loader + ranking
+  recommend.py          grounded (RAG-lite) product recommendations
+  product_mentions.py   "ye wala / iska" anaphora resolution over the catalog
+  scoring.py            deterministic conversation score (intent, objections, NPS)
+  voice/                agent voice enrollment / diarization helpers
+  enterprise/           DPDP-grade, event-driven layer (Kafka / S3 / Bedrock-ready)
+    routing/            delivery connectors: zoho, twilio_whatsapp, push,
+                        salesforce + hubspot (PLANNED stubs, ready to wire)
+    consent/ erasure/ extraction/ storage/ events/   compliance + fan-out
+  store.py              tenant-scoped store: users, roles, live sessions, insights
+  ingestion.py queueing.py worker.py delivery.py events.py security.py
 ```
 
-Phase 0 status: every AI stage is a deterministic stub behind its final
-interface; the privacy and security machinery is real — consent gate, PII
-redaction (incl. Aadhaar/PAN), audio encrypted at rest and destroyed with a
-hash-chained audit trail, salted-hashed API keys with scopes/expiry/revocation,
-HMAC-signed webhooks with SSRF guarding, per-key rate limits, idempotent
-offline-sync uploads, delete-on-demand, and structural tenant isolation.
+### Front-ends (each is a separate app)
 
-The integration rails are also real: transactional outbox (an event exists iff
-the insight write committed), thin signed event envelopes with UUIDv7 ids and
-per-resource sequence numbers, at-least-once delivery with exponential backoff
-+ jitter (1m → 5m → 30m → 2h → 12h, max 5 attempts), dead-letter queue with
-one-click replay, auto-disable of flapping endpoints, dual-secret rotation
-with zero-downtime overlap, and per-endpoint delivery-health stats.
+```
+voclyp-mobile/   Agent app (Expo / React Native) — the field tool. Consent +
+                 name/number capture, record a visit, then see notes, objections,
+                 coaching, recommended mattresses, and the visit score.
+web/             Manager console (React + Vite). One codebase, role-isolated
+                 views: manager / store_manager / area_manager / admin.
+src/ + root      Marketing website (Next.js, package name "voclyp-app"): the
+ (next.config.ts, public/, package.json)   public site (Hero, Pricing, FAQ, …).
+```
+
+### Shared / supporting
+
+```
+contracts/   versioned JSON Schemas — insight output + thin webhook event
+configs/     behavior-as-data: taxonomy signal packs, language policy,
+             pipeline composition, product catalogs (configs/catalogs/)
+supabase/    Postgres migrations for the enterprise layer
+docs/        architecture, security, running, AWS deploy, enterprise design
+evals/       MLOps regression fixtures
+scripts/     run_sleep_company, seed_sleep_company, sarvam_ping, sarvam_check,
+             reprocess_insights, demo, demo_app
+tests/       unit + end-to-end tests
+```
+
+## End-to-end flow
+
+1. **Agent app** captures consent and the customer name/number (live ASR).
+2. The agent records the visit; audio reaches the **gateway**, which runs the
+   **pipeline**: ASR → diarize → translate → redact → destroy audio → signals →
+   visit-notes + product recommendation + score.
+3. The **versioned insight** is stored; the agent immediately sees notes,
+   objections, coaching, recommended mattresses, and a score.
+4. **Managers / area managers** review the same insights in the **web console**.
+5. The **enterprise layer** fans each insight out to CRM / WhatsApp connectors
+   (Zoho today; Salesforce / HubSpot stubs ready) with consent + erasure built in.
+
+## Roles & the area-manager dashboard
+
+`USER_ROLES` (`voclyp/store.py`): `sales`, `store_manager`, `area_manager`,
+`admin`, plus the single-org `manager`. The **web console renders role-isolated
+views from one codebase** — area managers get the multi-store comparison
+(`web/src/manager/stores/`), store managers their store, sales reps their own
+pitches — so a new "authority" dashboard is a scoped view here, not a new app.
+
+## Status
+
+The privacy and security machinery is real — consent gate, PII redaction (incl.
+Aadhaar/PAN), audio encrypted at rest and destroyed with a hash-chained audit
+trail, salted-hashed API keys with scopes/expiry/revocation, HMAC-signed
+webhooks with SSRF guarding, per-key rate limits, idempotent offline-sync
+uploads, delete-on-demand, and structural tenant isolation. The integration
+rails are real too: transactional outbox, thin signed event envelopes (UUIDv7 +
+per-resource sequence), at-least-once delivery with exponential backoff + jitter
+(1m → 5m → 30m → 2h → 12h, max 5 attempts), dead-letter queue with one-click
+replay, auto-disable of flapping endpoints, dual-secret rotation, and
+per-endpoint delivery-health stats. The AI stages run live on Sarvam AI
+(Indian-language ASR + translate + grounded summarization) with deterministic
+stubs behind the same interfaces for credit-free local runs and tests.

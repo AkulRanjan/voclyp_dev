@@ -16,13 +16,35 @@ class StubDiarization(Stage):
     version = "stub-0.1"
 
     def run(self, ctx: ConversationContext) -> None:
-        previous = "customer"  # so the first unknown turn becomes "agent"
+        # Sarvam batch already diarized — only alternate unlabeled turns.
+        if any(u.speaker_id for u in ctx.utterances):
+            for utt in ctx.utterances:
+                if utt.speaker == "unknown" and not utt.speaker_id:
+                    utt.speaker = "agent"
+            return
+        previous = "customer"
         for utt in ctx.utterances:
             if utt.speaker == "unknown":
                 utt.speaker = "agent" if previous == "customer" else "customer"
             previous = utt.speaker
 
 
+class PassthroughDiarization(Stage):
+    """No-op when ASR + speaker cleanup already assigned speakers."""
+    name = "diarization"
+    version = "passthrough-1.0"
+
+    def run(self, ctx: ConversationContext) -> None:
+        for utt in ctx.utterances:
+            if utt.speaker == "unknown":
+                utt.speaker = "customer"
+
+
 @register("diarization", "stub")
-def _create(options, services):
+def _create_stub(options, services):
     return StubDiarization()
+
+
+@register("diarization", "passthrough")
+def _create_passthrough(options, services):
+    return PassthroughDiarization()

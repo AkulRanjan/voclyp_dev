@@ -4,6 +4,7 @@
   "stages": [
     { "role": "asr", "impl": "stub" },
     { "role": "diarization", "impl": "stub" },
+    { "role": "speaker_id", "impl": "voiceprint", "options": { "threshold": 0.7 } },
     { "role": "lang_id_translation", "impl": "stub" },
     { "role": "pii_redaction", "impl": "regex" },
     { "role": "audio_deletion", "impl": "vault" },

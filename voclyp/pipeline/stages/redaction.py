@@ -35,7 +35,7 @@ class RegexRedaction(Stage):
 
         for utt in ctx.utterances:
             for attr in ("text", "normalized_text"):
-                value = getattr(utt, attr)
+                value = getattr(utt, attr) or ""
                 for pii_type, pattern in _PATTERNS.items():
                     value, n = pattern.subn(f"[REDACTED:{pii_type.upper()}]", value)
                     if attr == "text" and n:  # count once, not per variant

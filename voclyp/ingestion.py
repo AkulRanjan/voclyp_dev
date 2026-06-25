@@ -18,6 +18,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
+from .audio.prepare import looks_like_audio
 from .config import Settings
 from .queueing import JobQueue
 from .security import AudioVault
@@ -42,9 +43,16 @@ class IngestionService:
         self.settings = settings or Settings()
 
     def _chunk(self, audio_bytes: bytes) -> list:
-        """Split into chunks of roughly chunk_bytes, preferring newline
-        boundaries so no utterance is cut in half."""
+        """Split large uploads. Text stubs split on newlines; binary audio on byte boundaries."""
         limit = self.settings.chunk_bytes
+        if len(audio_bytes) <= limit:
+            return [audio_bytes]
+        if looks_like_audio(audio_bytes):
+            chunks = []
+            while audio_bytes:
+                chunks.append(audio_bytes[:limit])
+                audio_bytes = audio_bytes[limit:]
+            return chunks
         chunks = []
         while audio_bytes:
             if len(audio_bytes) <= limit:
@@ -80,6 +88,7 @@ class IngestionService:
             raise ValidationError(f"unknown tenant '{tenant_id}'")
 
         agent_id = self._field(metadata, "agent_id")
+        store_id = self._field(metadata, "store_id")
         customer_name = self._field(metadata, "consent", "customer_name")
         client_ref = self._field(metadata, "client_ref")
 
@@ -105,11 +114,12 @@ class IngestionService:
             "audio_paths": audio_paths,
             "industry": industry,
             "agent_id": agent_id,
+            "store_id": store_id,
             "customer_name": customer_name,
         })
         self.store.audit(
             tenant_id, conversation_id, "ingested",
-            f"agent={agent_id} bytes={len(audio_bytes)} chunks={len(audio_paths)}"
-            f" encrypted_at_rest={self.vault.encrypted}",
+            f"agent={agent_id} store={store_id} bytes={len(audio_bytes)}"
+            f" chunks={len(audio_paths)} encrypted_at_rest={self.vault.encrypted}",
         )
         return conversation_id

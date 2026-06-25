@@ -12,6 +12,8 @@ dependencies = []
 [project.optional-dependencies]
 gateway = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart"]
 security = ["cryptography>=42"]  # audio encryption at rest (AudioVault)
+sarvam = ["sarvamai>=0.1"]       # diarized batch STT (post-conversation pipeline)
+aws = ["boto3>=1.34"]            # VOCLYP_VOICEPRINT_BACKEND=aws speaker embeddings
 
 [tool.setuptools.packages.find]
 include = ["voclyp*"]

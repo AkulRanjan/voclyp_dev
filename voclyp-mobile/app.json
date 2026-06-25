@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "VoClyp",
+    "slug": "voclyp-mobile",
+    "version": "0.1.0",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.voclyp.mobile",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "We need access to your microphone to record sales conversations",
+        "NSLocationWhenInUseUsageDescription": "We need your location to detect your store",
+        "NSFaceIDUsageDescription": "We use Face ID for secure app unlock",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "package": "com.voclyp.mobile",
+      "permissions": [
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "USE_BIOMETRIC"
+      ]
+    },
+    "web": {},
+    "plugins": [
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow $(PRODUCT_NAME) to access your face ID"
+        }
+      ]
+    ],
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#3d2bff"
+    }
+  }
+}

@@ -1,13 +1,26 @@
 {
-  "version": "1.3-sarvam",
-  "description": "Production pipeline backed by Sarvam AI batch STT (saaras:v3, codemix mode for the Hindi-English mixing field conversations actually have, native diarization with auto-detected speaker count) + translate. Requires SARVAM_API_KEY and the sarvamai package. Select with VOCLYP_PIPELINE_CONFIG=configs/pipeline.sarvam.json. Languages come from configs/languages.json (hi-IN + en-IN today). The diarization stage stays as a fallback: it only labels speakers the ASR left unknown.",
+  "version": "1.4-sarvam-diarized",
+  "description": "Production field pipeline: Sarvam Saaras v3 batch STT with 2-speaker diarization (agent+customer), voiceprint relabeling, background speaker drop, Mayura translate, taxonomy signals, transcript-based summary.",
   "stages": [
-    { "role": "asr", "impl": "sarvam_batch", "options": { "model": "saaras:v3", "mode": "codemix" } },
-    { "role": "diarization", "impl": "stub" },
+    {
+      "role": "asr",
+      "impl": "sarvam_batch",
+      "options": {
+        "model": "saaras:v3",
+        "mode": "codemix",
+        "language_code": "unknown",
+        "num_speakers": 2,
+        "timeout_s": 900,
+        "relabel_speakers": true,
+        "voiceprint_threshold": 0.65
+      }
+    },
+    { "role": "diarization", "impl": "passthrough" },
+    { "role": "speaker_id", "impl": "voiceprint", "options": { "threshold": 0.65 } },
     { "role": "lang_id_translation", "impl": "sarvam" },
     { "role": "pii_redaction", "impl": "regex" },
     { "role": "audio_deletion", "impl": "vault" },
     { "role": "signal_extraction", "impl": "taxonomy" },
-    { "role": "summarization", "impl": "taxonomy" }
+    { "role": "summarization", "impl": "sarvam_llm", "options": { "model": "sarvam-30b" } }
   ]
 }

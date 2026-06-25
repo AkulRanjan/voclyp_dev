@@ -13,7 +13,8 @@
     "intent": {
       "patterns": [
         { "subtype": "purchase_intent", "any": ["i will buy", "i will take", "send me", "book my order", "place the order"] },
-        { "subtype": "consider_later", "any": ["think about it", "next month", "later", "not now"] }
+        { "subtype": "consider_later", "any": ["think about it", "next month", "later", "not now"] },
+        { "subtype": "referral_intent", "any": ["recommend", "refer", "will tell my friends", "tell others", "sabko bataunga", "logo ko bataunga", "recommend karunga", "recommend karungi", "zaroor recommend", "highly recommend", "definitely recommend"] }
       ]
     },
     "demand": {

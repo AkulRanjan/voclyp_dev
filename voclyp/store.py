@@ -32,7 +32,9 @@ from .contracts import utcnow
 
 _TENANT_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-USER_ROLES = ("manager", "sales")
+# "manager" is the single-org console owner (web console + first signup);
+# store_manager/area_manager/admin are the multi-store hierarchy roles.
+USER_ROLES = ("sales", "manager", "store_manager", "area_manager", "admin")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS tenants (
@@ -47,6 +49,9 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE TABLE IF NOT EXISTS insights (
   tenant_id TEXT NOT NULL, conversation_id TEXT NOT NULL,
   schema_version TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL,
+  -- denormalized analytics dimensions/measures, mirrored from body on write so
+  -- store/rep/area rollups are plain indexed SQL, not JSON archaeology.
+  store_id TEXT, agent_id TEXT, score REAL, rating TEXT, outcome TEXT,
   PRIMARY KEY (tenant_id, conversation_id)
 );
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -126,14 +131,86 @@ CREATE TABLE IF NOT EXISTS invites (
   created_by TEXT, expires_at TEXT,
   used INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS areas (
+  tenant_id TEXT NOT NULL, area_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  manager_id TEXT NOT NULL,
+  region TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, area_id),
+  FOREIGN KEY (manager_id) REFERENCES users(user_id)
+);
+CREATE TABLE IF NOT EXISTS role_scopes (
+  tenant_id TEXT NOT NULL, user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  area_id TEXT,
+  store_ids TEXT,
+  PRIMARY KEY (tenant_id, user_id),
+  FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
+CREATE TABLE IF NOT EXISTS stores (
+  tenant_id TEXT NOT NULL, store_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  area_id TEXT NOT NULL,
+  region TEXT,
+  address_lat REAL, address_lng REAL, address_full TEXT,
+  manager_id TEXT NOT NULL,
+  team_size INTEGER,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, store_id),
+  FOREIGN KEY (manager_id) REFERENCES users(user_id)
+);
+CREATE TABLE IF NOT EXISTS live_sessions (
+  tenant_id TEXT NOT NULL, session_id TEXT NOT NULL,
+  store_id TEXT NOT NULL, agent_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'identity',
+  customer_name TEXT, customer_phone TEXT,
+  name_source TEXT, phone_source TEXT,
+  partial_transcript TEXT DEFAULT '',
+  consent_at TEXT, conversation_id TEXT,
+  started_at TEXT NOT NULL, ended_at TEXT,
+  PRIMARY KEY (tenant_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_live_sessions_store ON live_sessions(tenant_id, store_id, status);
+CREATE TABLE IF NOT EXISTS session_chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id TEXT NOT NULL, session_id TEXT NOT NULL,
+  seq INTEGER NOT NULL, chunk_path TEXT NOT NULL,
+  received_at TEXT NOT NULL,
+  UNIQUE (tenant_id, session_id, seq)
+);
+-- Sales-rep voiceprints: a small acoustic fingerprint enrolled at login so
+-- diarization can label which diarized speaker is the rep (vs customers).
+-- This is a feature vector, never raw audio — the enrollment clip is shredded
+-- the moment the fingerprint is computed.
+CREATE TABLE IF NOT EXISTS voiceprints (
+  tenant_id TEXT NOT NULL, user_id TEXT NOT NULL,
+  vector TEXT NOT NULL,           -- json list[float], L2-normalized
+  sample_count INTEGER NOT NULL DEFAULT 1,
+  model TEXT NOT NULL,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (tenant_id, user_id)
+);
 """
 
 # Columns added after the initial release; applied to existing databases.
 _MIGRATIONS = {
     "users": [("session_epoch", "INTEGER NOT NULL DEFAULT 0")],
+    "insights": [
+        ("store_id", "TEXT"), ("agent_id", "TEXT"), ("score", "REAL"),
+        ("rating", "TEXT"), ("outcome", "TEXT"),
+    ],
 }
 
 _GENESIS = "0" * 64
+
+# Indexes over columns that were added by migration; created AFTER _migrate so
+# pre-existing databases (whose base table predates these columns) don't fail.
+_POST_MIGRATION_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_insights_store ON insights(tenant_id, store_id)",
+    "CREATE INDEX IF NOT EXISTS idx_insights_agent ON insights(tenant_id, agent_id)",
+)
 
 
 class Store:
@@ -144,6 +221,8 @@ class Store:
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.executescript(_SCHEMA)
         self._migrate()
+        for stmt in _POST_MIGRATION_INDEXES:
+            self._conn.execute(stmt)
         self._conn.commit()
 
     def _migrate(self):
@@ -231,7 +310,7 @@ class Store:
         email = (email or "").strip().lower()
         name = (name or "").strip()
         if role not in USER_ROLES:
-            raise ValueError("role must be 'manager' or 'sales'")
+            raise ValueError(f"role must be one of {USER_ROLES}")
         if not _EMAIL.match(email):
             raise ValueError("invalid email address")
         if not name:
@@ -303,7 +382,7 @@ class Store:
         """Mint a single-use invite for a role on a tenant. The code is shown
         once; only its salted hash is stored."""
         if role not in USER_ROLES:
-            raise ValueError("role must be 'manager' or 'sales'")
+            raise ValueError(f"role must be one of {USER_ROLES}")
         invite_id = secrets.token_hex(8)
         secret = secrets.token_urlsafe(24)
         salt = security.new_salt()
@@ -339,11 +418,26 @@ class Store:
         return role
 
     # -- insights -----------------------------------------------------------
+    @staticmethod
+    def _insight_row(tenant_id, conversation_id, doc: dict) -> tuple:
+        """Full row for the insights table, mirroring the denormalized
+        analytics dimensions (store/agent/score/rating/outcome) out of the
+        insight body so store, rep, and area rollups are plain indexed SQL."""
+        scoring = doc.get("scoring") or {}
+        return (
+            tenant_id, conversation_id, doc["schema_version"],
+            json.dumps(doc, ensure_ascii=False), doc["created_at"],
+            doc.get("store_id") or None, doc.get("agent_id") or None,
+            scoring.get("score"), scoring.get("rating"), scoring.get("outcome"),
+        )
+
     def save_insight(self, tenant_id, conversation_id, doc: dict):
         self._exec(
-            "INSERT OR REPLACE INTO insights VALUES (?,?,?,?,?)",
-            (tenant_id, conversation_id, doc["schema_version"],
-             json.dumps(doc, ensure_ascii=False), doc["created_at"]),
+            "INSERT OR REPLACE INTO insights"
+            " (tenant_id, conversation_id, schema_version, body, created_at,"
+            " store_id, agent_id, score, rating, outcome)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            self._insight_row(tenant_id, conversation_id, doc),
         )
 
     def get_insight(self, tenant_id, conversation_id):
@@ -395,6 +489,14 @@ class Store:
                 (tenant_id, conversation_id, event, detail, ts, prev_hash, entry_hash),
             )
             self._conn.commit()
+
+    def latest_audit_detail(self, tenant_id, conversation_id, event: str) -> str | None:
+        row = self._exec(
+            "SELECT detail FROM audit_log WHERE tenant_id=? AND conversation_id=?"
+            " AND event=? ORDER BY id DESC LIMIT 1",
+            (tenant_id, conversation_id, event),
+        ).fetchone()
+        return row[0] if row else None
 
     def verify_audit_chain(self, tenant_id):
         """Recompute the tenant's hash chain; returns (ok, first_bad_entry_id)."""
@@ -517,9 +619,11 @@ class Store:
         event_id = events.new_event_id()
         with self._lock:
             self._conn.execute(
-                "INSERT OR REPLACE INTO insights VALUES (?,?,?,?,?)",
-                (tenant_id, conversation_id, doc["schema_version"],
-                 json.dumps(doc, ensure_ascii=False), doc["created_at"]),
+                "INSERT OR REPLACE INTO insights"
+                " (tenant_id, conversation_id, schema_version, body, created_at,"
+                " store_id, agent_id, score, rating, outcome)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?)",
+                self._insight_row(tenant_id, conversation_id, doc),
             )
             self._conn.execute(
                 "INSERT INTO sequences VALUES (?,?,1) ON CONFLICT"
@@ -752,3 +856,438 @@ class Store:
                 "retry_rate": round(retried / total, 3) if total else None,
             })
         return out
+
+    # -- stores (multi-store support) -----------------------------------------
+    def create_store(self, tenant_id, store_id, name, area_id, manager_id,
+                     region=None, lat=None, lng=None, address_full=None, team_size=None):
+        """Create a new store. Returns True if created, False if already exists."""
+        try:
+            self._exec(
+                "INSERT INTO stores (tenant_id, store_id, name, area_id, region,"
+                " address_lat, address_lng, address_full, manager_id, team_size,"
+                " created_at, updated_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'active')",
+                (tenant_id, store_id, name, area_id, region, lat, lng, address_full,
+                 manager_id, team_size, utcnow(), utcnow()),
+            )
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def get_store(self, tenant_id, store_id):
+        """Get store details by ID."""
+        row = self._exec(
+            "SELECT store_id, name, area_id, region, address_lat, address_lng,"
+            " address_full, manager_id, team_size, status, created_at, updated_at"
+            " FROM stores WHERE tenant_id=? AND store_id=?",
+            (tenant_id, store_id),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "store_id": row[0], "name": row[1], "area_id": row[2], "region": row[3],
+            "latitude": row[4], "longitude": row[5], "address": row[6],
+            "manager_id": row[7], "team_size": row[8], "status": row[9],
+            "created_at": row[10], "updated_at": row[11],
+        }
+
+    def list_stores(self, tenant_id, area_id=None, status="active"):
+        """List stores for a tenant, optionally filtered by area."""
+        sql = "SELECT store_id, name, area_id, manager_id, status FROM stores WHERE tenant_id=?"
+        params = [tenant_id]
+        if status:
+            sql += " AND status=?"
+            params.append(status)
+        if area_id:
+            sql += " AND area_id=?"
+            params.append(area_id)
+        sql += " ORDER BY name"
+        rows = self._exec(sql, params).fetchall()
+        return [{"store_id": r[0], "name": r[1], "area_id": r[2],
+                 "manager_id": r[3], "status": r[4]} for r in rows]
+
+    def update_store_status(self, tenant_id, store_id, status):
+        """Update store status (active/inactive/archived)."""
+        self._exec(
+            "UPDATE stores SET status=?, updated_at=? WHERE tenant_id=? AND store_id=?",
+            (status, utcnow(), tenant_id, store_id),
+        )
+
+    # -- areas (region/area grouping) -----------------------------------------
+    def create_area(self, tenant_id, area_id, name, manager_id, region=None):
+        """Create a new area. Returns True if created, False if already exists."""
+        try:
+            self._exec(
+                "INSERT INTO areas (tenant_id, area_id, name, manager_id, region, created_at)"
+                " VALUES (?,?,?,?,?,?)",
+                (tenant_id, area_id, name, manager_id, region, utcnow()),
+            )
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def get_area(self, tenant_id, area_id):
+        """Get area details by ID."""
+        row = self._exec(
+            "SELECT area_id, name, manager_id, region, created_at"
+            " FROM areas WHERE tenant_id=? AND area_id=?",
+            (tenant_id, area_id),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "area_id": row[0], "name": row[1], "manager_id": row[2],
+            "region": row[3], "created_at": row[4],
+        }
+
+    def list_areas(self, tenant_id, manager_id=None):
+        """List areas for a tenant, optionally filtered by manager."""
+        sql = "SELECT area_id, name, manager_id, region FROM areas WHERE tenant_id=?"
+        params = [tenant_id]
+        if manager_id:
+            sql += " AND manager_id=?"
+            params.append(manager_id)
+        sql += " ORDER BY name"
+        rows = self._exec(sql, params).fetchall()
+        return [{"area_id": r[0], "name": r[1], "manager_id": r[2],
+                 "region": r[3]} for r in rows]
+
+    # -- role scopes (area manager access control) ----------------------------
+    def set_user_role_scope(self, tenant_id, user_id, role, area_id=None, store_ids=None):
+        """Set a user's role and scope (area_id for area managers, store_ids list)."""
+        store_ids_str = ",".join(store_ids) if store_ids else None
+        self._exec(
+            "INSERT OR REPLACE INTO role_scopes (tenant_id, user_id, role, area_id, store_ids)"
+            " VALUES (?,?,?,?,?)",
+            (tenant_id, user_id, role, area_id, store_ids_str),
+        )
+
+    def get_user_role_scope(self, tenant_id, user_id):
+        """Get user's role and scope."""
+        row = self._exec(
+            "SELECT role, area_id, store_ids FROM role_scopes WHERE tenant_id=? AND user_id=?",
+            (tenant_id, user_id),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "role": row[0], "area_id": row[1],
+            "store_ids": row[2].split(",") if row[2] else [],
+        }
+
+    def get_manager_stores(self, tenant_id, manager_id):
+        """Get all stores managed by a user."""
+        rows = self._exec(
+            "SELECT store_id, name FROM stores WHERE tenant_id=? AND manager_id=? AND status='active'",
+            (tenant_id, manager_id),
+        ).fetchall()
+        return [{"store_id": r[0], "name": r[1]} for r in rows]
+
+    # -- live sessions (field visit streaming) --------------------------------
+    def create_live_session(self, tenant_id, session_id, store_id, agent_id):
+        self._exec(
+            "INSERT INTO live_sessions (tenant_id, session_id, store_id, agent_id,"
+            " status, started_at) VALUES (?,?,?,?,'identity',?)",
+            (tenant_id, session_id, store_id, agent_id, utcnow()),
+        )
+
+    def get_live_session(self, tenant_id, session_id):
+        row = self._exec(
+            "SELECT session_id, store_id, agent_id, status, customer_name,"
+            " customer_phone, name_source, phone_source, partial_transcript,"
+            " consent_at, conversation_id, started_at, ended_at"
+            " FROM live_sessions WHERE tenant_id=? AND session_id=?",
+            (tenant_id, session_id),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "session_id": row[0], "store_id": row[1], "agent_id": row[2],
+            "status": row[3], "customer_name": row[4], "customer_phone": row[5],
+            "name_source": row[6], "phone_source": row[7],
+            "partial_transcript": row[8], "consent_at": row[9],
+            "conversation_id": row[10], "started_at": row[11], "ended_at": row[12],
+        }
+
+    def update_live_session_customer(self, tenant_id, session_id, *,
+                                     name=None, phone=None, source="manual"):
+        session = self.get_live_session(tenant_id, session_id)
+        if not session:
+            return None
+        updates, params = [], []
+        if name is not None:
+            updates.append("customer_name=?")
+            params.append(name)
+            updates.append("name_source=?")
+            params.append(source)
+        if phone is not None:
+            updates.append("customer_phone=?")
+            params.append(phone)
+            updates.append("phone_source=?")
+            params.append(source)
+        if not updates:
+            return session
+        params.extend([tenant_id, session_id])
+        self._exec(
+            f"UPDATE live_sessions SET {', '.join(updates)} WHERE tenant_id=? AND session_id=?",
+            params,
+        )
+        return self.get_live_session(tenant_id, session_id)
+
+    def update_live_session_transcript(self, tenant_id, session_id, text):
+        self._exec(
+            "UPDATE live_sessions SET partial_transcript=? WHERE tenant_id=? AND session_id=?",
+            (text, tenant_id, session_id),
+        )
+
+    def set_live_session_status(self, tenant_id, session_id, status, *,
+                                consent=False, conversation_id=None):
+        fields, params = ["status=?"], [status]
+        if consent:
+            fields.append("consent_at=?")
+            params.append(utcnow())
+        if conversation_id:
+            fields.append("conversation_id=?")
+            params.append(conversation_id)
+        if status in ("complete", "processing"):
+            fields.append("ended_at=?")
+            params.append(utcnow())
+        params.extend([tenant_id, session_id])
+        self._exec(
+            f"UPDATE live_sessions SET {', '.join(fields)} WHERE tenant_id=? AND session_id=?",
+            params,
+        )
+        return self.get_live_session(tenant_id, session_id)
+
+    def complete_live_session_for_conversation(self, tenant_id, conversation_id):
+        """Mark the live visit complete once its insight is stored."""
+        self._exec(
+            "UPDATE live_sessions SET status='complete', ended_at=?"
+            " WHERE tenant_id=? AND conversation_id=? AND status='processing'",
+            (utcnow(), tenant_id, conversation_id),
+        )
+
+    def append_session_chunk(self, tenant_id, session_id, seq, chunk_path):
+        self._exec(
+            "INSERT OR REPLACE INTO session_chunks"
+            " (tenant_id, session_id, seq, chunk_path, received_at)"
+            " VALUES (?,?,?,?,?)",
+            (tenant_id, session_id, seq, chunk_path, utcnow()),
+        )
+
+    def list_session_chunks(self, tenant_id, session_id):
+        rows = self._exec(
+            "SELECT seq, chunk_path, received_at FROM session_chunks"
+            " WHERE tenant_id=? AND session_id=? ORDER BY seq",
+            (tenant_id, session_id),
+        ).fetchall()
+        return [{"seq": r[0], "chunk_path": r[1], "received_at": r[2]} for r in rows]
+
+    def list_active_sessions(self, tenant_id, area_id=None, store_ids=None):
+        sql = (
+            "SELECT s.session_id, s.store_id, st.name, s.agent_id, s.status,"
+            " s.customer_name, s.customer_phone, s.started_at, s.consent_at"
+            " FROM live_sessions s"
+            " LEFT JOIN stores st ON st.tenant_id=s.tenant_id AND st.store_id=s.store_id"
+            " WHERE s.tenant_id=? AND s.status IN ('identity','active')"
+        )
+        params: list = [tenant_id]
+        if store_ids:
+            placeholders = ",".join("?" * len(store_ids))
+            sql += f" AND s.store_id IN ({placeholders})"
+            params.extend(store_ids)
+        elif area_id:
+            sql += " AND st.area_id=?"
+            params.append(area_id)
+        sql += " ORDER BY s.started_at DESC"
+        rows = self._exec(sql, params).fetchall()
+        return [{
+            "session_id": r[0], "store_id": r[1], "store_name": r[2],
+            "agent_id": r[3], "status": r[4], "customer_name": r[5],
+            "customer_phone": r[6], "started_at": r[7], "consent_at": r[8],
+        } for r in rows]
+
+    def analytics_stores_compare(self, tenant_id, area_id=None, store_ids=None):
+        """Aggregate insight metrics per store for manager comparison."""
+        stores = self.list_stores(tenant_id, area_id=area_id)
+        if store_ids:
+            stores = [s for s in stores if s["store_id"] in store_ids]
+
+        results = []
+        for st in stores:
+            sid = st["store_id"]
+            rows = self._exec(
+                "SELECT body FROM insights WHERE tenant_id=? AND store_id=?",
+                (tenant_id, sid),
+            ).fetchall()
+            visits = len(rows)
+            ortho = competitor = trial = emi = buying = 0
+            objections: dict[str, int] = {}
+            for (body,) in rows:
+                doc = json.loads(body)
+                for sig in doc.get("signals") or []:
+                    stype = sig.get("type", "")
+                    sub = sig.get("subtype", "")
+                    if stype == "demand" and "ortho" in sub:
+                        ortho += 1
+                    if stype == "competitor_mention":
+                        competitor += 1
+                    if stype == "intent" and sub == "trial_request":
+                        trial += 1
+                    if stype == "intent" and sub == "emi_request":
+                        emi += 1
+                    if stype == "intent" and sub == "purchase_intent":
+                        buying += 1
+                    if stype == "objection":
+                        objections[sub or "other"] = objections.get(sub or "other", 0) + 1
+            top_objection = max(objections, key=objections.get) if objections else None
+            qualified_pct = round(100 * buying / visits, 1) if visits else 0
+            results.append({
+                "store_id": sid,
+                "store_name": st["name"],
+                "visits": visits,
+                "qualified_pct": qualified_pct,
+                "orthopaedic_demand_pct": round(100 * ortho / visits, 1) if visits else 0,
+                "competitor_mentions": competitor,
+                "trial_requests": trial,
+                "emi_requests": emi,
+                "top_objection": top_objection,
+            })
+
+        if results:
+            avg_visits = sum(r["visits"] for r in results) / len(results)
+            for r in results:
+                r["vs_area_avg_visits"] = round(r["visits"] - avg_visits, 1)
+        return {"stores": results, "area_id": area_id}
+
+    # -- voiceprints (rep voice enrollment for diarization) -------------------
+    def set_voiceprint(self, tenant_id, user_id, vector, model, sample_count=1):
+        """Store (or re-enroll) a rep's voice fingerprint. The vector is a small
+        L2-normalized feature list; no raw audio is ever persisted."""
+        existing = self.get_voiceprint(tenant_id, user_id)
+        created = existing["created_at"] if existing else utcnow()
+        self._exec(
+            "INSERT OR REPLACE INTO voiceprints"
+            " (tenant_id, user_id, vector, sample_count, model, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (tenant_id, user_id, json.dumps(vector), int(sample_count),
+             model, created, utcnow()),
+        )
+        self.audit(tenant_id, None, "voiceprint_enrolled",
+                   f"user={user_id} dims={len(vector)} model={model}")
+
+    def get_voiceprint(self, tenant_id, user_id):
+        row = self._exec(
+            "SELECT vector, sample_count, model, created_at, updated_at"
+            " FROM voiceprints WHERE tenant_id=? AND user_id=?",
+            (tenant_id, user_id),
+        ).fetchone()
+        if not row:
+            return None
+        return {"vector": json.loads(row[0]), "sample_count": row[1],
+                "model": row[2], "created_at": row[3], "updated_at": row[4]}
+
+    def analytics_reps(self, tenant_id, area_id=None, store_ids=None):
+        """Per-rep leaderboard: visits, average score, win rate, top objection.
+        The comparable, aggregatable view a manager coaches from."""
+        stores = self.list_stores(tenant_id, area_id=area_id)
+        allowed = {s["store_id"] for s in stores}
+        if store_ids:
+            allowed &= set(store_ids)
+        rows = self._exec(
+            "SELECT agent_id, store_id, score, rating, outcome, body"
+            " FROM insights WHERE tenant_id=?", (tenant_id,),
+        ).fetchall()
+        reps: dict = {}
+        for agent_id, store_id, score, rating, outcome, body in rows:
+            if not agent_id or (allowed and store_id not in allowed):
+                continue
+            rep = reps.setdefault(agent_id, {
+                "agent_id": agent_id, "visits": 0, "score_sum": 0.0,
+                "promising": 0, "at_risk": 0, "objections": {},
+            })
+            rep["visits"] += 1
+            rep["score_sum"] += score or 0.0
+            if outcome == "promising":
+                rep["promising"] += 1
+            elif outcome == "at_risk":
+                rep["at_risk"] += 1
+            for sig in (json.loads(body).get("signals") or []):
+                if sig.get("type") == "objection":
+                    sub = sig.get("subtype") or "other"
+                    rep["objections"][sub] = rep["objections"].get(sub, 0) + 1
+        out = []
+        for rep in reps.values():
+            visits = rep["visits"]
+            user = self.get_user(rep["agent_id"])
+            objections = rep.pop("objections")
+            out.append({
+                "agent_id": rep["agent_id"],
+                "name": (user or {}).get("name") or rep["agent_id"],
+                "visits": visits,
+                "avg_score": round(rep["score_sum"] / visits, 1) if visits else 0,
+                "win_rate": round(100 * rep["promising"] / visits, 1) if visits else 0,
+                "at_risk": rep["at_risk"],
+                "top_objection": max(objections, key=objections.get) if objections else None,
+            })
+        out.sort(key=lambda r: (r["avg_score"], r["visits"]), reverse=True)
+        return {"reps": out, "area_id": area_id}
+
+    def analytics_area_summary(self, tenant_id, area_id=None, store_ids=None):
+        """Headline KPIs across the manager's scope — the dashboard hero row."""
+        compare = self.analytics_stores_compare(
+            tenant_id, area_id=area_id, store_ids=store_ids)
+        stores = compare["stores"]
+        visits = sum(s["visits"] for s in stores)
+        if not stores:
+            return {"area_id": area_id, "stores": 0, "visits": 0,
+                    "qualified_pct": 0, "avg_score": 0,
+                    "top_store": None, "needs_attention": None}
+        weighted_q = sum(s["qualified_pct"] * s["visits"] for s in stores)
+        # average score across the scope, read from the denormalized column
+        allowed = [s["store_id"] for s in stores]
+        placeholders = ",".join("?" * len(allowed))
+        row = self._exec(
+            f"SELECT AVG(score) FROM insights WHERE tenant_id=?"
+            f" AND store_id IN ({placeholders})",
+            [tenant_id, *allowed],
+        ).fetchone()
+        ranked = sorted(stores, key=lambda s: s["qualified_pct"], reverse=True)
+        return {
+            "area_id": area_id,
+            "stores": len(stores),
+            "visits": visits,
+            "qualified_pct": round(weighted_q / visits, 1) if visits else 0,
+            "avg_score": round(row[0], 1) if row and row[0] is not None else 0,
+            "top_store": {"store_id": ranked[0]["store_id"],
+                          "store_name": ranked[0]["store_name"],
+                          "qualified_pct": ranked[0]["qualified_pct"]},
+            "needs_attention": {"store_id": ranked[-1]["store_id"],
+                                "store_name": ranked[-1]["store_name"],
+                                "qualified_pct": ranked[-1]["qualified_pct"]},
+        }
+
+    def analytics_store_detail(self, tenant_id, store_id):
+        store = self.get_store(tenant_id, store_id)
+        if not store:
+            return None
+        compare = self.analytics_stores_compare(tenant_id, store_ids=[store_id])
+        insights = self._exec(
+            "SELECT conversation_id, body, created_at, agent_id FROM insights"
+            " WHERE tenant_id=? AND store_id=? ORDER BY created_at DESC LIMIT 50",
+            (tenant_id, store_id),
+        ).fetchall()
+        recent = []
+        for cid, body, created, agent in insights:
+            doc = json.loads(body)
+            recent.append({
+                "conversation_id": cid,
+                "agent_id": agent,
+                "created_at": created,
+                "summary": doc.get("summary", {}).get("text", ""),
+                "signal_count": len(doc.get("signals") or []),
+            })
+        return {
+            "store": store,
+            "metrics": compare["stores"][0] if compare["stores"] else {},
+            "recent_visits": recent,
+        }

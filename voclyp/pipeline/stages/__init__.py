@@ -12,6 +12,8 @@ from . import whisper_asr  # registers asr:whisper (lazy heavy imports)
 from . import sarvam_asr  # registers asr:sarvam
 from . import sarvam_batch_asr  # registers asr:sarvam_batch (diarized)
 from . import sarvam_translate  # registers lang_id_translation:sarvam
+from . import speaker_id  # registers speaker_id:voiceprint (agent voice match)
+from . import sarvam_visit_notes  # registers summarization:sarvam_llm
 
 __all__ = [
     "StubASR", "StubDiarization", "StubTranslation", "RegexRedaction",

@@ -10,7 +10,8 @@ export type DataSource = "seed" | "live";
 const STORAGE = "voclyp_data_source";
 
 export function getDataSource(): DataSource {
-  return localStorage.getItem(STORAGE) === "live" ? "live" : "seed";
+  if (localStorage.getItem(STORAGE) === "seed") return "seed";
+  return "live";
 }
 
 export function setDataSource(src: DataSource): void {

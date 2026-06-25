@@ -27,6 +27,15 @@ export function WelcomePage() {
         <p className="auth-sub">How will you use VoClyp?</p>
 
         <div className="welcome-roles">
+          <button type="button" className="welcome-role" onClick={() => pick("area_manager")}>
+            <span className="welcome-role__icon"><Icon name="store" size={22} /></span>
+            <span className="welcome-role__title">Area manager</span>
+            <span className="welcome-role__desc">
+              Live floor, store comparison &amp; territory analytics
+            </span>
+            <span className="welcome-role__go">Continue <Icon name="chevron-right" size={15} /></span>
+          </button>
+
           <button type="button" className="welcome-role" onClick={() => pick("manager")}>
             <span className="welcome-role__icon"><Icon name="bar-chart" size={22} /></span>
             <span className="welcome-role__title">Manager</span>

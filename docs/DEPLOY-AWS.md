@@ -130,6 +130,39 @@ env var so SQLite/local stays the default for dev and tests.
 | Data residency (DPDP) | Single-region deployment; `region` field per tenant |
 | Threat detection / forensics | GuardDuty, CloudTrail, VPC Flow Logs |
 
+## AI models, STT credits & voice enrollment
+
+VoClyp's intelligence runs on two layers, both swappable by config:
+
+**1. Speech-to-text + diarization — Sarvam AI.** The production pipeline
+(`configs/pipeline.sarvam.json`) uses Sarvam `saaras:v3` batch STT with native
+speaker diarization (who-said-what) for the post-visit transcript, plus Sarvam
+`saarika` for the live, real-time consent capture, and Sarvam Mayura for
+translation. Set `SARVAM_API_KEY` (your 100k-credit key) and the platform
+auto-selects this pipeline; every call is metered into `/v1/metrics`
+(`sarvam:speech-to-text-job`, `sarvam:speech-to-text-streaming`,
+`sarvam:translate`) so credit burn is visible per conversation. Without a key it
+falls back to the dependency-free stub pipeline, so the demo always runs.
+
+**2. Sales-rep voice recognition (diarization speaker ID).** At login the rep
+records a one-time clip on the mobile app; the gateway turns it into a small
+**voiceprint** (a feature vector — never raw audio, the clip is shredded) stored
+per user. During post-visit processing the `speaker_id` stage matches the
+conversation audio against the rep's voiceprint, so the diarized "agent" turns
+are confidently attributed to a named rep and customers stay de-identified
+(Customer A/B/C). The baseline fingerprint is dependency-free; for production
+accuracy set `VOCLYP_VOICEPRINT_BACKEND=aws` and wire `voclyp/voice/aws.py` to a
+real speaker-embedding model (e.g. **Amazon Transcribe** call analytics /
+speaker partitioning, or a **SageMaker** endpoint hosting a speaker-embedding
+model such as pyannote/SpeechBrain). The contract is just
+`embed(audio) -> {vector, model}` + cosine `similarity`, so nothing else changes.
+
+**Using the $10k AWS credits.** Run the whole stack (Path A/B above) in your AWS
+account; the credits cover ECS/RDS/S3/SQS/CloudFront. For the speaker-embedding
+backend, a SageMaker real-time endpoint or Transcribe usage also draws on those
+credits. Keep `SARVAM_API_KEY` and any AWS keys in **Secrets Manager**, never in
+the image or `.env` (the `.env` file is for local dev only and is git-ignored).
+
 ## Rough cost
 
 A small single-region private deployment is roughly **$100–200 / month**:

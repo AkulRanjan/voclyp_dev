@@ -4,7 +4,9 @@
   "normalize_to": "en-IN",
   "enabled": [
     { "code": "hi-IN", "name": "Hindi" },
-    { "code": "en-IN", "name": "English" }
+    { "code": "en-IN", "name": "English" },
+    { "code": "gu-IN", "name": "Gujarati" },
+    { "code": "mr-IN", "name": "Marathi" }
   ],
   "planned": [
     "bn-IN", "gu-IN", "kn-IN", "ml-IN", "mr-IN", "od-IN", "pa-IN", "ta-IN", "te-IN"

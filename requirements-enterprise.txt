@@ -1,0 +1,24 @@
+# VoClyp enterprise cloud layer — OPTIONAL dependencies.
+#
+# The core demo (requirements.txt) needs none of these. Install this file only
+# when wiring the live cloud integrations; every component degrades to an
+# in-process mock when its library or credentials are absent.
+
+# AWS S3 (Mumbai) + Bedrock Claude (Converse API)
+boto3>=1.34.0
+
+# Sarvam Batch API SDK (long showroom recordings > 30s)
+sarvamai>=0.1.0
+
+# Supabase / PostgreSQL transactional store (sync + async connection pools)
+psycopg[binary]>=3.1.0
+psycopg-pool>=3.2.0
+
+# Apache Kafka client (AWS MSK / Confluent / local redpanda)
+confluent-kafka>=2.3.0
+
+# Twilio WhatsApp Business API
+twilio>=9.0.0
+
+# Redis Enterprise cache
+redis>=5.0.0

@@ -1,0 +1,57 @@
+{
+  "name": "voclyp-mobile",
+  "version": "0.1.0",
+  "description": "VoClyp - Sales insights & WhatsApp recommendations for The Sleep Company",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "eject": "expo eject",
+    "test": "jest --watch",
+    "lint": "eslint src/"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "testEnvironment": "node"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/netinfo": "11.4.1",
+    "@react-navigation/bottom-tabs": "^6.5.0",
+    "@react-navigation/native": "^6.1.0",
+    "@react-navigation/native-stack": "^6.11.0",
+    "@reduxjs/toolkit": "^1.9.7",
+    "axios": "^1.6.0",
+    "date-fns": "^3.0.0",
+    "expo": "^54.0.0",
+    "expo-av": "~16.0.8",
+    "expo-local-authentication": "~17.0.8",
+    "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.17",
+    "expo-splash-screen": "~31.0.13",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-chart-kit": "^6.12.0",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-paper": "^5.12.0",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-native-share": "^10.0.0",
+    "react-native-svg": "15.12.1",
+    "react-native-vector-icons": "^10.0.0",
+    "react-redux": "^9.0.0",
+    "redux-persist": "^6.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@testing-library/react-native": "^12.4.0",
+    "@types/react": "~19.1.10",
+    "jest": "^29.7.0",
+    "jest-expo": "~54.0.17",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

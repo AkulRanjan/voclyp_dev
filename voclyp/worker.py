@@ -10,9 +10,11 @@ Runnable as a service:  python -m voclyp.worker --data-dir data
 from __future__ import annotations
 
 import argparse
+import shutil
 import time
 from pathlib import Path
 
+from .catalog import load_catalog
 from .config import Settings, load_settings
 from .contracts import ConversationContext, build_insight
 from .delivery import Dispatcher
@@ -42,14 +44,38 @@ class Worker:
 
     def _pipeline_for(self, industry: str) -> PipelineRunner:
         if industry not in self._pipelines:
+            try:
+                catalog = load_catalog(industry)
+            except FileNotFoundError:
+                catalog = None  # not every vertical ships a product catalog
             services = {
                 "vault": self.vault,
                 "taxonomy": load_taxonomy(industry, self.taxonomy_dir),
                 "settings": self.settings,
                 "languages": load_languages(),
+                "catalog": catalog,
             }
             self._pipelines[industry] = build_pipeline(self.pipeline_config, services)
         return self._pipelines[industry]
+
+    def _stage_audio(self, conversation_id: str, vault_paths: list[str]) -> list[str]:
+        """Copy vault audio to a per-job work dir so pipeline deletion cannot
+        destroy the originals before the job succeeds (retries need them)."""
+        work_root = Path(self.store.db_path).parent / "work" / conversation_id
+        shutil.rmtree(work_root, ignore_errors=True)
+        work_root.mkdir(parents=True, exist_ok=True)
+        staged: list[str] = []
+        for i, vault_path in enumerate(vault_paths):
+            work_path = work_root / f"part{i}.audio"
+            self.vault.write(work_path, self.vault.read(vault_path))
+            staged.append(str(work_path))
+        return staged
+
+    def _purge_vault_audio(self, conversation_id: str, vault_paths: list[str]) -> None:
+        for path in vault_paths:
+            self.vault.delete(path)
+        work_root = Path(self.store.db_path).parent / "work" / conversation_id
+        shutil.rmtree(work_root, ignore_errors=True)
 
     def process_one(self):
         """Process a single queued conversation; returns the insight or None."""
@@ -58,22 +84,34 @@ class Worker:
             return None
         tenant_id, conversation_id = job["tenant_id"], job["conversation_id"]
         payload = job["payload"]
+        vault_audio_paths = list(payload["audio_paths"])
         try:
             ctx = ConversationContext(
                 tenant_id=tenant_id,
                 conversation_id=conversation_id,
                 industry=payload["industry"],
-                audio_paths=list(payload["audio_paths"]),
+                audio_paths=self._stage_audio(conversation_id, vault_audio_paths),
                 agent_id=payload.get("agent_id", ""),
+                store_id=payload.get("store_id", ""),
                 consent_captured=True,  # enforced at ingestion
                 customer_name=payload.get("customer_name", ""),
             )
+            # Speaker identity: load the rep's enrolled voiceprint + display
+            # name so the speaker_id stage can verify and label the agent turns.
+            agent = self.store.get_user(ctx.agent_id) if ctx.agent_id else None
+            if agent:
+                ctx.rep_name = agent.get("name", "")
+            voiceprint = self.store.get_voiceprint(tenant_id, ctx.agent_id)
+            if voiceprint:
+                ctx.agent_voiceprint = voiceprint["vector"]
             self._pipeline_for(ctx.industry).run(ctx)
 
             doc = build_insight(ctx)
             # transactional outbox: insight + event commit together, then the
             # dispatcher (not this worker) owns signing, retries, and the DLQ
             self.store.save_insight_with_event(tenant_id, conversation_id, doc)
+            self._purge_vault_audio(conversation_id, vault_audio_paths)
+            self.store.complete_live_session_for_conversation(tenant_id, conversation_id)
             self.store.add_metrics(tenant_id, conversation_id, ctx.stage_timings_ms)
             self.store.add_usage(tenant_id, conversation_id, ctx.provider_usage)
             self.store.audit(tenant_id, conversation_id, "audio_deleted",
@@ -124,6 +162,8 @@ def main(argv=None):
     parser.add_argument("--poll-interval", type=float, default=2.0)
     args = parser.parse_args(argv)
 
+    from .env import load_dotenv
+    load_dotenv()
     settings = load_settings()
     data_dir = Path(args.data_dir or settings.data_dir)
     worker = Worker(

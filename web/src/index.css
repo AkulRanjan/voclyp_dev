@@ -12,10 +12,15 @@
   --text-muted: #6b7280;
   --text-faint: #9aa1ad;
 
-  /* accent (teal/blue) */
-  --accent: #1f9d8f;
-  --accent-strong: #15806f;
-  --accent-soft: #e6f5f2;
+  /* VoClyp brand */
+  --brand-indigo: #3d2bff;
+  --brand-amber: #ffb347;
+  --brand-navy: #0a0f1e;
+
+  /* accent */
+  --accent: #3d2bff;
+  --accent-strong: #2f22cc;
+  --accent-soft: #3d2bff14;
 
   /* semantic tones — soft bg + saturated text (chips, badges) */
   --red-bg: #fde8e8;      --red-fg: #c0392b;      --red-bd: #f5c6c2;
