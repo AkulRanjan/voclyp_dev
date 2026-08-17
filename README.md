@@ -226,3 +226,5 @@ replay, auto-disable of flapping endpoints, dual-secret rotation, and
 per-endpoint delivery-health stats. The AI stages run live on Sarvam AI
 (Indian-language ASR + translate + grounded summarization) with deterministic
 stubs behind the same interfaces for credit-free local runs and tests.
+
+This is currently under development. 
